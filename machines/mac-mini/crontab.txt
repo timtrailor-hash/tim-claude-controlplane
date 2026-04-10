@@ -1,0 +1,11 @@
+@reboot /Users/timtrailor/.local/bin/start_services.sh
+
+
+# Weekly cross-machine ~/.claude/ drift check (added 2026-04-07)
+0 9 * * 1 /bin/bash /Users/timtrailor/.claude/hooks/drift_check.sh --strict >> /tmp/drift_check_cron.log 2>&1
+
+# Hourly memory_index_all (added 2026-04-07 — bidirectional sync)
+30 * * * * /opt/homebrew/bin/python3.11 /Users/timtrailor/code/memory_index_all.py >> /tmp/memory_index_cron.log 2>&1
+
+# Hourly memory health check (restored 2026-04-11 after silent removal)
+0 * * * * /bin/bash /Users/timtrailor/.claude/hooks/memory_health_check.sh --strict >> /tmp/memory_health_cron.log 2>&1

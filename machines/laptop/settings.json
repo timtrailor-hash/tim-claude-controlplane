@@ -1,0 +1,205 @@
+{
+    "permissions": {
+        "allow": [
+            "Bash",
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep",
+            "WebFetch",
+            "WebSearch",
+            "mcp__memory",
+            "mcp__claude_ai_Databricks_SQL_MCP__execute_sql_read_only",
+            "mcp__claude_ai_Databricks_SQL_MCP__execute_sql"
+        ],
+        "additionalDirectories": [
+            "/Users/timtrailor/code"
+        ]
+    },
+    "mcpServers": {
+        "memory": {
+            "type": "stdio",
+            "command": "/opt/homebrew/bin/python3.11",
+            "args": [
+                "/Users/timtrailor/code/memory_server.py"
+            ]
+        },
+        "filesystem": {
+            "type": "stdio",
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-filesystem",
+                "/Users/timtrailor/Documents/Claude code",
+                "/Users/timtrailor/code",
+                "/Users/timtrailor/.claude"
+            ]
+        },
+        "sequential-thinking": {
+            "type": "stdio",
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-sequential-thinking"
+            ]
+        },
+        "context7": {
+            "type": "stdio",
+            "command": "npx",
+            "args": [
+                "-y",
+                "@upstash/context7-mcp"
+            ]
+        },
+        "serena": {
+            "type": "stdio",
+            "command": "/opt/homebrew/bin/uvx",
+            "args": [
+                "--from",
+                "git+https://github.com/oraios/serena",
+                "serena",
+                "start-mcp-server",
+                "--context",
+                "ide-assistant"
+            ]
+        },
+        "github": {
+            "type": "stdio",
+            "command": "/Users/timtrailor/.claude/mcp-launchers/github-mcp.sh"
+        }
+    },
+    "hooks": {
+        "SessionStart": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/validate_hooks.sh",
+                        "timeout": 10
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/memory_health_check.sh",
+                        "timeout": 15
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/memory_sync_pull.sh",
+                        "timeout": 10
+                    },
+                    {
+                        "type": "command",
+                        "command": "MEM=''; for p in /Users/timtrailor/.claude/projects/-Users-timtrailor-Documents-Claude-code/memory /Users/timtrailor/.claude/projects/-Users-timtrailor-code/memory; do [ -d \"$p/.git\" ] && MEM=\"$p\" && break; done; [ -z \"$MEM\" ] && exit 0; cd \"$MEM\" && git stash -q 2>/dev/null; git pull --rebase origin main 2>/tmp/claude_git_pull.log; PULL_RC=$?; git stash pop -q 2>/dev/null || git checkout --theirs . 2>/dev/null && git stash drop -q 2>/dev/null; [ $PULL_RC -ne 0 ] && (git rebase --abort 2>/dev/null; echo 'Memory pull failed' | curl -s -d @- ntfy.sh/timtrailor-claude 2>/dev/null); exit 0",
+                        "timeout": 15
+                    }
+                ]
+            }
+        ],
+        "SessionEnd": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/auto_review_hook.sh",
+                        "timeout": 30
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/drift_check_trigger.sh",
+                        "timeout": 10
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/memory_sync_push.sh",
+                        "timeout": 10
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/code/auto_index.sh",
+                        "timeout": 60
+                    },
+                    {
+                        "type": "command",
+                        "command": "MEM=''; for p in /Users/timtrailor/.claude/projects/-Users-timtrailor-Documents-Claude-code/memory /Users/timtrailor/.claude/projects/-Users-timtrailor-code/memory; do [ -d \"$p/.git\" ] && MEM=\"$p\" && break; done; [ -z \"$MEM\" ] && exit 0; cd \"$MEM\" && git add -A && git diff --cached --quiet || (git commit -m 'Auto-sync: session end' && (git push origin main 2>/tmp/claude_git_push.log || (echo 'Memory push failed' | curl -s -d @- ntfy.sh/timtrailor-claude 2>/dev/null; cat /tmp/claude_git_push.log >> ~/.claude/audit.log)))",
+                        "timeout": 30
+                    },
+                    {
+                        "type": "command",
+                        "command": "curl -s -d 'Claude session ended' ntfy.sh/timtrailor-claude 2>/dev/null || true",
+                        "timeout": 10
+                    }
+                ]
+            }
+        ],
+        "PreToolUse": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/protected_path_hook.sh",
+                        "timeout": 5
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/printer-safety-check.sh",
+                        "timeout": 8
+                    }
+                ],
+                "matcher": "Bash"
+            },
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/credential_leak_hook.sh",
+                        "timeout": 5
+                    }
+                ],
+                "matcher": "Write"
+            },
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/credential_leak_hook.sh",
+                        "timeout": 5
+                    }
+                ],
+                "matcher": "Edit"
+            }
+        ],
+        "PostToolUse": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/audit_log_hook.sh",
+                        "timeout": 3
+                    }
+                ],
+                "matcher": "Bash"
+            },
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/lint_hook.sh",
+                        "timeout": 45
+                    }
+                ],
+                "matcher": "Edit"
+            },
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/lint_hook.sh",
+                        "timeout": 45
+                    }
+                ],
+                "matcher": "Write"
+            }
+        ]
+    }
+}

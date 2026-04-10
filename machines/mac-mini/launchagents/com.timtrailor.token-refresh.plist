@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.timtrailor.token-refresh</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/python3.11</string>
+        <string>/Users/timtrailor/code/token_refresh.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/timtrailor/code</string>
+    <key>StartInterval</key>
+    <integer>1800</integer>
+    <key>StandardOutPath</key>
+    <string>/tmp/token_refresh.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/token_refresh.log</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>/Users/timtrailor/code:/Users/timtrailor/code/claude-mobile</string>
+    </dict>
+</dict>
+</plist>

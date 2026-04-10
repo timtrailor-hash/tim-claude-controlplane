@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.timtrailor.ttyd</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/ttyd</string>
+        <string>--port</string>
+        <string>7681</string>
+        <string>--interface</string>
+        <string>tailscale0</string>
+        <string>--credential</string>
+        <string>tim:[REDACTED-LEGACY]</string>
+        <string>/bin/zsh</string>
+        <string>-l</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/ttyd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/ttyd.err</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/timtrailor/.local/bin</string>
+        <key>HOME</key>
+        <string>/Users/timtrailor</string>
+    </dict>
+</dict>
+</plist>

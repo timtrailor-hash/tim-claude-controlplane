@@ -1,0 +1,148 @@
+# Mac Mini Service Manifest — single source of truth for all persistent processes
+# Every entry here MUST exist as a LaunchAgent or cron job. Nothing else should run.
+
+services:
+  conversation-server:
+    purpose: "WebSocket Claude session broker + tmux HTTP proxy + APNs push"
+    owner: conversation_server.py
+    mode: KeepAlive
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/claude-mobile/conversation_server.py
+    port: 8081
+    secrets: [AUTH_TOKEN, APNS_KEY_ID, APNS_TEAM_ID]
+    failure_mode: "YELLOW — mobile access lost, laptop/SSH still works"
+    auto_fix: false
+    notes: "4851-line monolith — scheduled for Phase 3 decomposition"
+
+  governors:
+    purpose: "Castle Federation Ofsted Streamlit app"
+    owner: ofsted-agent/app.py
+    mode: KeepAlive
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/ofsted-agent/app.py
+    port: 8501
+    secrets: [GEMINI_API_KEY]
+    failure_mode: "YELLOW — governors app unavailable, no other impact"
+    auto_fix: false
+
+  backup-to-drive:
+    purpose: "Nightly backup of code, configs, credentials, memory, certs to Google Drive"
+    owner: backup_to_drive.py
+    mode: StartCalendarInterval 03:00
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/backup_to_drive.py
+    secrets: [GCP_SERVICE_ACCOUNT]
+    failure_mode: "YELLOW — backup staleness, alert after 26h"
+    auto_fix: false
+
+  printer-snapshots:
+    purpose: "Adaptive printer status poller (30s printing, 5min idle)"
+    owner: printer_daemon.py
+    mode: KeepAlive
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/sv08-print-tools/printer_daemon.py
+    secrets: []
+    failure_mode: "YELLOW — printer status stale, no active harm"
+    auto_fix: false
+    notes: "READ-ONLY — must never send commands to printer"
+
+  token-refresh:
+    purpose: "Daily OAuth token refresh for Google Workspace"
+    owner: token_refresh.py
+    mode: StartCalendarInterval daily
+    python: /opt/homebrew/bin/python3.11
+    secrets: [GOOGLE_OAUTH_CLIENT_SECRET]
+    failure_mode: "YELLOW — OAuth expires, GWS MCP tools stop working"
+    auto_fix: false
+
+  governorhub-sync:
+    purpose: "Weekly GovernorHub document download + context rebuild"
+    owner: governorhub_sync.py
+    mode: StartCalendarInterval Monday 06:00
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/ofsted-agent/governorhub_sync.py
+    secrets: [GovernorHub session cookies via keychain]
+    failure_mode: "YELLOW — stale context, alert after 8 days"
+    auto_fix: false
+
+  ttyd:
+    purpose: "Browser-based terminal access"
+    owner: ttyd
+    mode: KeepAlive
+    binary: /opt/homebrew/bin/ttyd
+    port: 7681
+    secrets: []
+    failure_mode: "YELLOW — browser terminal unavailable"
+    auto_fix: false
+
+  unlock-keychain:
+    purpose: "Unlock login keychain at boot for headless secret access"
+    owner: security CLI
+    mode: RunAtLoad
+    secrets: ["~/.keychain_pass (HARDENED: chmod 600, documented risk acceptance)"]
+    failure_mode: "RED — all secrets inaccessible, all daemons fail to start"
+    auto_fix: false
+    risk_note: "~/.keychain_pass is a plaintext root-of-trust bypass. Accepted risk for headless Mac Mini. chmod 600, excluded from unencrypted backups."
+
+  unified-monitor:
+    purpose: "Hourly system health monitor — observe and alert ONLY (replaces health-check + system-monitor)"
+    owner: system_monitor.py (to be refactored)
+    mode: StartInterval 3600
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/system_monitor.py
+    secrets: [SMTP_PASS]
+    failure_mode: "YELLOW — monitoring gap"
+    auto_fix: "WHITELIST ONLY — may restart memory-indexer. NO other auto-fix."
+    notes: "Merges health-check and system-monitor into one authority. Phase 4 deliverable."
+
+  bgt-date-monitor:
+    purpose: "BGT ticket date monitoring"
+    owner: bgt_date_monitor.py
+    mode: StartInterval 600
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/bgt_date_monitor.py
+    secrets: []
+    failure_mode: "LOW — ticket alert delayed"
+    auto_fix: false
+    notes: "Evaluate: 10-min polling necessary? Consider webhook or hourly."
+
+cron_jobs:
+  reboot_services:
+    schedule: "@reboot"
+    command: /Users/timtrailor/.local/bin/start_services.sh
+    purpose: "Start keychain + ttyd at boot"
+
+  memory_health_check:
+    schedule: "0 * * * *"
+    command: /bin/bash /Users/timtrailor/.claude/hooks/memory_health_check.sh --strict
+    log: /tmp/memory_health_cron.log
+    purpose: "Hourly functional memory probe"
+
+  memory_index_all:
+    schedule: "30 * * * *"
+    command: /opt/homebrew/bin/python3.11 /Users/timtrailor/code/memory_index_all.py
+    log: /tmp/memory_index_cron.log
+    purpose: "Hourly transcript indexing for bidirectional memory sync"
+
+  drift_check:
+    schedule: "0 9 * * 1"
+    command: /bin/bash /Users/timtrailor/.claude/hooks/drift_check.sh --strict
+    log: /tmp/drift_check_cron.log
+    purpose: "Weekly cross-machine ~/.claude/ drift detection"
+
+deprecated:
+  claude-wrapper:
+    reason: "Replaced by conversation-server. Legacy Flask wrapper."
+    action: "Remove LaunchAgent after verifying no clients depend on it"
+  
+  streamlit-https:
+    reason: "Evaluate: can HTTPS be handled by Streamlit directly or by the unified monitor?"
+    action: "Keep for now, evaluate during Phase 4"
+
+  memory-indexer:
+    reason: "Duplicate authority — cron job at :30 already handles indexing"
+    action: "Remove KeepAlive LaunchAgent, keep cron"
+
+  ttyd-tunnel:
+    reason: "Evaluate: still needed with Tailscale providing direct access?"
+    action: "Keep for now, evaluate during Phase 4"

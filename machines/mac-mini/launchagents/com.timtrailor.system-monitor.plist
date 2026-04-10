@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.timtrailor.system-monitor</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/python3.11</string>
+        <string>/Users/timtrailor/code/system_monitor.py</string>
+    </array>
+    <key>StandardErrorPath</key>
+    <string>/tmp/system_monitor.log</string>
+    <key>StandardOutPath</key>
+    <string>/tmp/system_monitor.log</string>
+    <key>StartInterval</key>
+    <integer>3600</integer>
+    <key>WorkingDirectory</key>
+    <string>/Users/timtrailor/code</string>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
