@@ -84,14 +84,11 @@ else
     check "printer-safety-check wired in settings.json" "1"
 fi
 
-# 3. Check keychain_pass permissions
+# 3. keychain_pass must NOT exist (audit 2026-04-11 §3.5 — keychain migration).
 if [ -f "$HOME/.keychain_pass" ]; then
-    PERMS=$(stat -f "%Lp" "$HOME/.keychain_pass")
-    if [ "$PERMS" = "600" ]; then
-        check "~/.keychain_pass permissions = 600" "0"
-    else
-        check "~/.keychain_pass permissions = $PERMS (should be 600)" "1"
-    fi
+    check "~/.keychain_pass resurfaced — should be deleted post-2026-04-11 migration" "1"
+else
+    check "~/.keychain_pass absent (keychain migration intact)" "0"
 fi
 
 # 4. Check critical binaries
