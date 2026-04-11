@@ -137,6 +137,26 @@ else
     check "services.yaml exists" "1"
 fi
 
+# 6a. system_map.yaml schema validation (runs for BOTH machines' maps)
+# A faulty source of truth is more dangerous than a distributed one.
+if [ -x /opt/homebrew/bin/python3.11 ]; then
+    for MACHINE_NAME in mac-mini laptop; do
+        MAP_PATH="$REPO_DIR/machines/$MACHINE_NAME/system_map.yaml"
+        if [ -f "$MAP_PATH" ]; then
+            VALIDATE_OUT=$(SYSTEM_MAP_MACHINE="$MACHINE_NAME" \
+                /opt/homebrew/bin/python3.11 "$REPO_DIR/shared/lib/system_map.py" validate 2>&1)
+            VALIDATE_RC=$?
+            if [ "$VALIDATE_RC" = "0" ]; then
+                check "system_map.yaml ($MACHINE_NAME) schema valid" "0"
+            else
+                while IFS= read -r line; do
+                    [ -n "$line" ] && check "system_map ($MACHINE_NAME): $line" "1"
+                done <<< "$VALIDATE_OUT"
+            fi
+        fi
+    done
+fi
+
 # 6b. system_map.yaml ↔ plists ↔ health_check.py three-way alignment
 #
 # Pattern 17 (observability drift): system_map.yaml is the declared source of

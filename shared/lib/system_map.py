@@ -180,6 +180,150 @@ def _mini_yaml_parse(text: str) -> dict:
     return root
 
 
+# ---------------------------------------------------------------------------
+# Schema validation — catches typos in field names, invalid probe types,
+# missing required fields, and wrong types. Runs at parse time and as a
+# dedicated verify.sh check.
+#
+# A faulty source of truth is more dangerous than a distributed one.
+# -- Gemini 2.5 Pro, midway review 2026-04-11
+# ---------------------------------------------------------------------------
+
+_VALID_PROBE_TYPES = {"http", "file_age", "process", "keychain", "tcp"}
+_VALID_FAILURE_MODES = {"GREEN", "YELLOW", "ORANGE", "RED", "LOW"}
+_REQUIRED_SERVICE_FIELDS = {"label", "purpose", "mode", "failure_mode"}
+_OPTIONAL_SERVICE_FIELDS = {
+    "owner", "code", "binary", "port", "secrets", "failure_impact", "probe",
+    "notes", "auto_fix", "risk_note",
+}
+_VALID_SERVICE_FIELDS = _REQUIRED_SERVICE_FIELDS | _OPTIONAL_SERVICE_FIELDS
+
+_VALID_PROBE_FIELDS_BY_TYPE = {
+    "http": {"type", "url", "expect_status", "timeout_s", "expect_json_keys", "notes"},
+    "file_age": {"type", "path", "max_age_hours", "max_age_minutes", "notes"},
+    "process": {"type", "name", "notes"},
+    "keychain": {"type", "service", "account", "notes"},
+    "tcp": {"type", "host", "port", "timeout_s", "notes"},
+}
+
+
+def validate(sm: dict | None = None) -> list[str]:
+    """Validate a system_map dict against the schema. Returns a list of
+    issue strings (empty list == valid)."""
+    if sm is None:
+        sm = load()
+    issues: list[str] = []
+
+    # Top-level required keys
+    for key in ("schema_version", "machine", "services"):
+        if key not in sm:
+            issues.append(f"top-level: missing required key '{key}'")
+
+    if sm.get("schema_version") != 1:
+        issues.append(
+            f"top-level: schema_version must be 1, got {sm.get('schema_version')!r}"
+        )
+
+    # Services
+    services = sm.get("services") or {}
+    if not isinstance(services, dict):
+        issues.append(f"services: must be a mapping, got {type(services).__name__}")
+        return issues
+
+    for name, entry in services.items():
+        prefix = f"services.{name}"
+        if entry is None:
+            # empty services dict on laptop is legitimate
+            continue
+        if not isinstance(entry, dict):
+            issues.append(f"{prefix}: must be a mapping, got {type(entry).__name__}")
+            continue
+        # Unknown fields (typo detector)
+        unknown = set(entry.keys()) - _VALID_SERVICE_FIELDS
+        if unknown:
+            issues.append(f"{prefix}: unknown fields {sorted(unknown)}")
+        # Missing required fields
+        missing = _REQUIRED_SERVICE_FIELDS - set(entry.keys())
+        if missing:
+            issues.append(f"{prefix}: missing required fields {sorted(missing)}")
+        # failure_mode must be valid
+        fm = entry.get("failure_mode")
+        if fm and fm not in _VALID_FAILURE_MODES:
+            issues.append(
+                f"{prefix}: failure_mode {fm!r} not in {sorted(_VALID_FAILURE_MODES)}"
+            )
+        # label must look like com.timtrailor.<short>
+        label = entry.get("label", "")
+        if label and not label.startswith("com.timtrailor."):
+            issues.append(
+                f"{prefix}: label {label!r} must start with 'com.timtrailor.'"
+            )
+        # Validate probe if present
+        probe = entry.get("probe")
+        if probe is not None:
+            if not isinstance(probe, dict):
+                issues.append(f"{prefix}.probe: must be a mapping")
+            else:
+                ptype = probe.get("type")
+                if ptype not in _VALID_PROBE_TYPES:
+                    issues.append(
+                        f"{prefix}.probe.type: {ptype!r} not in {sorted(_VALID_PROBE_TYPES)}"
+                    )
+                else:
+                    valid_fields = _VALID_PROBE_FIELDS_BY_TYPE[ptype]
+                    probe_unknown = set(probe.keys()) - valid_fields
+                    if probe_unknown:
+                        issues.append(
+                            f"{prefix}.probe ({ptype}): unknown fields {sorted(probe_unknown)}"
+                        )
+                    # Check required probe-specific fields
+                    if ptype == "http" and "url" not in probe:
+                        issues.append(f"{prefix}.probe: http probe missing 'url'")
+                    if ptype == "file_age":
+                        if "path" not in probe:
+                            issues.append(f"{prefix}.probe: file_age probe missing 'path'")
+                        if "max_age_hours" not in probe and "max_age_minutes" not in probe:
+                            issues.append(
+                                f"{prefix}.probe: file_age probe missing 'max_age_hours' or 'max_age_minutes'"
+                            )
+                    if ptype == "process" and "name" not in probe:
+                        issues.append(f"{prefix}.probe: process probe missing 'name'")
+                    if ptype == "keychain":
+                        if "service" not in probe:
+                            issues.append(f"{prefix}.probe: keychain probe missing 'service'")
+                        if "account" not in probe:
+                            issues.append(f"{prefix}.probe: keychain probe missing 'account'")
+                    if ptype == "tcp":
+                        if "host" not in probe:
+                            issues.append(f"{prefix}.probe: tcp probe missing 'host'")
+                        if "port" not in probe:
+                            issues.append(f"{prefix}.probe: tcp probe missing 'port'")
+
+    # User-visible outputs: must have path, producer, consumer
+    uv = sm.get("user_visible_outputs") or {}
+    if isinstance(uv, dict):
+        for name, entry in uv.items():
+            prefix = f"user_visible_outputs.{name}"
+            if not isinstance(entry, dict):
+                continue
+            for f in ("path", "producer", "consumer"):
+                if f not in entry:
+                    issues.append(f"{prefix}: missing required field '{f}'")
+
+    # Canonical paths: must be absolute
+    paths = sm.get("canonical_paths") or {}
+    if isinstance(paths, dict):
+        for name, path_val in paths.items():
+            if not isinstance(path_val, str):
+                continue
+            if not path_val.startswith("/"):
+                issues.append(
+                    f"canonical_paths.{name}: {path_val!r} must be absolute"
+                )
+
+    return issues
+
+
 def load() -> dict:
     """Load the system_map.yaml for the current machine. Returns a dict."""
     p = _system_map_path()
@@ -252,9 +396,18 @@ if __name__ == "__main__":
                 print(f"com.timtrailor.{name}")
     elif cmd == "validate":
         sm = load()
-        assert sm.get("schema_version") == 1, "schema_version must be 1"
-        assert sm.get("services"), "services section missing"
-        print(f"OK: {len(sm.get('services', {}))} services, {len(sm.get('canonical_paths', {}))} paths")
+        issues = validate(sm)
+        if issues:
+            print(f"INVALID: {len(issues)} issue(s)")
+            for i in issues:
+                print(f"  - {i}")
+            sys.exit(2)
+        print(
+            f"OK: schema_version={sm.get('schema_version')} "
+            f"services={len(sm.get('services') or {})} "
+            f"paths={len(sm.get('canonical_paths') or {})} "
+            f"probes={sum(1 for s in (sm.get('services') or {}).values() if isinstance(s, dict) and s.get('probe'))}"
+        )
     else:
         import json
         print(json.dumps(load(), indent=2, default=str))
