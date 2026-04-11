@@ -86,7 +86,7 @@ for sub in rules hooks agents skills mcp-launchers; do
         done)
 
     # Get remote file→md5 map via SSH (single round trip)
-    REMOTE_HASHES=$(ssh "timtrailor@$OTHER" "cd ~/.claude/$sub 2>/dev/null && find . -type f -not -name '*.log' -not -name '*.cache' -not -name '.DS_Store' -not -name '*.pyc' -not -path '*/__pycache__/*' 2>/dev/null | sort | while read -r f; do REL=\${f#./}; HASH=\$(md5 -q \"\$f\" 2>/dev/null); echo \"\$HASH  \$REL\"; done" 2>/dev/null)
+    REMOTE_HASHES=$(ssh "timtrailor@$OTHER" "cd ~/.claude/$sub 2>/dev/null && find -L . -type f -not -name '*.log' -not -name '*.cache' -not -name '.DS_Store' -not -name '*.pyc' -not -path '*/__pycache__/*' -not -path '*.pre-deploy-*' 2>/dev/null | sort | while read -r f; do REL=\${f#./}; HASH=\$(md5 -q \"\$f\" 2>/dev/null); echo \"\$HASH  \$REL\"; done" 2>/dev/null)
 
     # Diff the two maps
     LOCAL_NAMES=$(echo "$LOCAL_HASHES" | awk '{print $2}' | sort)

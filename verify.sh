@@ -41,21 +41,26 @@ echo "=== verify.sh ==="
 SETTINGS="$HOME/.claude/settings.json"
 if [ -f "$SETTINGS" ]; then
     MISSING_HOOKS=$(python3 - "$SETTINGS" <<PYEOF
-import json, sys, os
+import json, sys, os, re
 data = json.load(open(sys.argv[1]))
 missing = []
+# Only check tokens that look like executable scripts/binaries.
+# Shell for-loops and dual-path-or patterns have other / tokens that
+# are legitimately per-machine (e.g. /Users/.../-Documents-Claude-code
+# vs /Users/.../-code) — those are NOT the hook we're validating.
+EXE_SUFFIX = re.compile(r"\.(sh|py|pl|rb)$|/bin/[^/\s]+$")
 for stage in data.get("hooks", {}).values():
     for entry in stage:
         for h in entry.get("hooks", []):
             cmd = h.get("command", "")
             for tok in cmd.split():
-                if tok.startswith("/") and ("/" in tok[1:]):
+                if tok.startswith("/") and EXE_SUFFIX.search(tok):
                     if not os.path.exists(tok):
                         missing.append(tok)
                     break
 for m in data.get("mcpServers", {}).values():
     cmd = m.get("command", "")
-    if cmd.startswith("/") and not os.path.exists(cmd):
+    if cmd.startswith("/") and EXE_SUFFIX.search(cmd) and not os.path.exists(cmd):
         missing.append(cmd)
 for p in missing:
     print(p)
