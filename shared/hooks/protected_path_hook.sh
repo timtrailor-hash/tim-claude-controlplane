@@ -37,6 +37,11 @@ if echo "$COMMAND" | grep -qE '(Library/LaunchAgents|Library/LaunchDaemons)'; th
     exit 2
 fi
 
+# Pattern 1b: launchctl read-only commands (list, print) — always allowed
+if echo "$COMMAND" | grep -qE 'launchctl\s+(list|print)'; then
+    exit 0
+fi
+
 # Pattern 2: launchctl state-changing commands
 if echo "$COMMAND" | grep -qE 'launchctl\s+(bootstrap|bootout|kickstart|load|unload|enable|disable)'; then
     echo "BLOCKED: launchctl state-changing command requires explicit approval."
