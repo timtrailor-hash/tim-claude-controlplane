@@ -131,8 +131,9 @@ services:
     probe:
       type: http
       url: http://127.0.0.1:7681/
-      expect_status: 200
+      expect_status: 401
       timeout_s: 5
+      notes: "401 is healthy — ttyd requires basic auth; a 401 proves the server is alive and auth is configured"
 
   ttyd-tunnel:
     label: com.timtrailor.ttyd-tunnel

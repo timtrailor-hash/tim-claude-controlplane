@@ -243,7 +243,9 @@ if __name__ == "__main__":
             if isinstance(entry, dict):
                 path = entry.get("path", "")
                 probe_url = entry.get("probe_url", "")
-                print(f"{name}|{path}|{probe_url}")
+                required = entry.get("required_on_deploy", False)
+                required_str = "required" if required else "optional"
+                print(f"{name}|{path}|{probe_url}|{required_str}")
     elif cmd == "deprecated_labels":
         for name, entry in deprecated().items():
             if isinstance(entry, dict):

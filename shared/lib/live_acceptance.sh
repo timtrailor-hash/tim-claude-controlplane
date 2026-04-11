@@ -87,6 +87,7 @@ else
         NAME=$(echo "$line" | cut -d'|' -f1)
         PATH_RAW=$(echo "$line" | cut -d'|' -f2)
         PROBE_URL=$(echo "$line" | cut -d'|' -f3)
+        REQUIRED=$(echo "$line" | cut -d'|' -f4)
         # Expand ~ in path
         ARTIFACT=$(echo "$PATH_RAW" | sed "s|^~|$HOME|")
         if [ "$ARTIFACT" != "/dev/null" ] && [ -n "$ARTIFACT" ]; then
@@ -94,20 +95,27 @@ else
                 MTIME=$(stat -f "%m" "$ARTIFACT" 2>/dev/null || echo 0)
                 if [ "$MTIME" -gt "$DEPLOY_START" ]; then
                     check_pass "$NAME: $ARTIFACT fresh (mtime=$MTIME > deploy_start=$DEPLOY_START)"
+                elif [ "$REQUIRED" = "required" ]; then
+                    AGE=$((DEPLOY_START - MTIME))
+                    check_fail "$NAME: $ARTIFACT STALE (${AGE}s older than deploy start, required_on_deploy=true)"
                 else
                     AGE=$((DEPLOY_START - MTIME))
-                    check_fail "$NAME: $ARTIFACT STALE (${AGE}s older than deploy start)"
+                    check_warn "$NAME: $ARTIFACT not refreshed (${AGE}s older than deploy, required_on_deploy=false, OK)"
                 fi
+            elif [ "$REQUIRED" = "required" ]; then
+                check_fail "$NAME: $ARTIFACT missing (required_on_deploy=true)"
             else
-                check_fail "$NAME: $ARTIFACT missing"
+                check_warn "$NAME: $ARTIFACT missing (required_on_deploy=false, OK)"
             fi
         fi
-        # HTTP probe if present
+        # HTTP probe on the user-visible output if declared
         if [ -n "$PROBE_URL" ]; then
             if curl -s --max-time 5 -o /dev/null -w "%{http_code}" "$PROBE_URL" 2>/dev/null | grep -q "^200$"; then
                 check_pass "$NAME: $PROBE_URL returns 200"
-            else
+            elif [ "$REQUIRED" = "required" ]; then
                 check_fail "$NAME: $PROBE_URL did not return 200"
+            else
+                check_warn "$NAME: $PROBE_URL did not return 200 (optional)"
             fi
         fi
     done <<< "$UV_OUTPUTS"
