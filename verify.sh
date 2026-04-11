@@ -132,6 +132,80 @@ else
     check "services.yaml exists" "1"
 fi
 
+# 6b. Services manifest ↔ plists ↔ health_check.py three-way alignment
+#
+# Pattern 17 (observability drift): services.yaml is the declared source of
+# truth, but downstream consumers (plists, monitors) silently drift. This
+# check enforces that all three agree, so the next Phase 4-style deletion
+# can't break the monitor.
+if command -v /opt/homebrew/bin/python3.11 >/dev/null 2>&1; then
+    ALIGN_RESULT=$(/opt/homebrew/bin/python3.11 - "$REPO_DIR" <<'PYEOF' 2>&1
+import os, sys, re
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+svc_yaml = repo / "machines" / "mac-mini" / "services.yaml"
+plist_dir = repo / "machines" / "mac-mini" / "launchagents"
+
+# Parse services.yaml services: section (top-level entries under `services:`)
+in_services = False
+declared = set()
+for line in svc_yaml.read_text().splitlines():
+    if line.rstrip() == "services:":
+        in_services = True
+        continue
+    if in_services:
+        if line and not line.startswith(" "):
+            break
+        m = re.match(r"^  ([a-z][a-z0-9\-]*):\s*$", line)
+        if m:
+            declared.add(m.group(1))
+
+# Plist basenames
+plists = {p.stem.replace("com.timtrailor.", "")
+          for p in plist_dir.glob("com.timtrailor.*.plist")}
+
+# health_check.py LAUNCHAGENTS list (on Mac Mini, via SSH if not local)
+hc_path = Path("/Users/timtrailor/code/health_check.py")
+if hc_path.exists():
+    hc_text = hc_path.read_text()
+else:
+    import subprocess
+    try:
+        hc_text = subprocess.check_output(
+            ["ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes",
+             "timtrailor@192.168.0.172", "cat ~/code/health_check.py"],
+            text=True, timeout=10)
+    except Exception:
+        hc_text = ""
+
+monitored = set()
+if hc_text:
+    m = re.search(r"LAUNCHAGENTS\s*=\s*\[(.*?)\]", hc_text, re.DOTALL)
+    if m:
+        monitored = set(re.findall(r"com\.timtrailor\.([a-z][a-z0-9\-]*)", m.group(1)))
+
+issues = []
+if declared != plists:
+    issues.append(f"services.yaml vs plists: only_in_yaml={sorted(declared-plists)} only_in_plists={sorted(plists-declared)}")
+if monitored and declared != monitored:
+    issues.append(f"services.yaml vs health_check.py LAUNCHAGENTS: only_in_yaml={sorted(declared-monitored)} only_in_monitor={sorted(monitored-declared)}")
+if not monitored:
+    issues.append("could not parse health_check.py LAUNCHAGENTS (not reachable?)")
+
+for i in issues:
+    print(i)
+PYEOF
+)
+    if [ -z "$ALIGN_RESULT" ]; then
+        check "services.yaml ↔ plists ↔ health_check.py aligned" "0"
+    else
+        while IFS= read -r line; do
+            [ -n "$line" ] && check "alignment drift: $line" "1"
+        done <<< "$ALIGN_RESULT"
+    fi
+fi
+
 # 7. Run pytest scenarios (unless --quick)
 if [ "$QUICK" = "0" ] && [ -d "$REPO_DIR/scenarios" ]; then
     if /opt/homebrew/bin/python3.11 -m pytest --version 2>/dev/null >/dev/null 2>&1; then

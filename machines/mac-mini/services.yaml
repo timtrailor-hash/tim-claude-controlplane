@@ -84,16 +84,36 @@ services:
     auto_fix: false
     risk_note: "~/.keychain_pass is a plaintext root-of-trust bypass. Accepted risk for headless Mac Mini. chmod 600, excluded from unencrypted backups."
 
-  unified-monitor:
-    purpose: "Hourly system health monitor — observe and alert ONLY (replaces health-check + system-monitor)"
-    owner: system_monitor.py (to be refactored)
+  health-check:
+    purpose: "Hourly health-check monitor — observe and alert"
+    owner: health_check.py
     mode: StartInterval 3600
     python: /opt/homebrew/bin/python3.11
-    code: ~/code/system_monitor.py
+    code: ~/code/health_check.py
     secrets: [SMTP_PASS]
     failure_mode: "YELLOW — monitoring gap"
-    auto_fix: "WHITELIST ONLY — may restart memory-indexer. NO other auto-fix."
-    notes: "Merges health-check and system-monitor into one authority. Phase 4 deliverable."
+    auto_fix: false
+    notes: "To be merged with system-monitor into unified-monitor. Phase 4 deliverable (deferred 2026-04-11)."
+
+  streamlit-https:
+    purpose: "HTTPS proxy for Governors Streamlit app"
+    owner: streamlit_https_proxy.py
+    mode: KeepAlive
+    code: ~/code/streamlit_https_proxy.py
+    secrets: [TLS certs in ~/code/certs/]
+    failure_mode: "YELLOW — governors app accessible via HTTP only"
+    auto_fix: false
+    notes: "Evaluate: Streamlit native HTTPS or Caddy — 2026-04-11 still running"
+
+  ttyd-tunnel:
+    purpose: "Cloudflare tunnel for browser terminal access"
+    owner: cloudflared
+    mode: KeepAlive
+    binary: /opt/homebrew/bin/cloudflared
+    secrets: [Cloudflare tunnel token]
+    failure_mode: "YELLOW — browser terminal not reachable externally"
+    auto_fix: false
+    notes: "Evaluate: still needed now that Tailscale provides direct access — 2026-04-11 still running"
 
   bgt-date-monitor:
     purpose: "BGT ticket date monitoring"
@@ -132,17 +152,13 @@ cron_jobs:
 
 deprecated:
   claude-wrapper:
+    status: "REMOVED 2026-04-11 (Phase 4)"
     reason: "Replaced by conversation-server. Legacy Flask wrapper."
-    action: "Remove LaunchAgent after verifying no clients depend on it"
-  
-  streamlit-https:
-    reason: "Evaluate: can HTTPS be handled by Streamlit directly or by the unified monitor?"
-    action: "Keep for now, evaluate during Phase 4"
 
   memory-indexer:
+    status: "REMOVED 2026-04-11 (Phase 4)"
     reason: "Duplicate authority — cron job at :30 already handles indexing"
-    action: "Remove KeepAlive LaunchAgent, keep cron"
 
-  ttyd-tunnel:
-    reason: "Evaluate: still needed with Tailscale providing direct access?"
-    action: "Keep for now, evaluate during Phase 4"
+  system-monitor:
+    status: "NEVER DEPLOYED — plist was stale in repo, removed 2026-04-11"
+    reason: "Superseded by health-check + future unified-monitor"

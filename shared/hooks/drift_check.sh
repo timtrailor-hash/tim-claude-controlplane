@@ -206,6 +206,41 @@ PYEOF
 fi
 rm -f "$REMOTE_SETTINGS_TMP"
 
+# 3. Memory topics git repo drift
+#
+# This catches Pattern 17 at the memory layer: both machines auto-commit to
+# their local clone of the memory repo, diverging silently. We compare
+# HEAD commits and count how many each side is ahead/behind.
+MEM_REPOS=(
+    "$HOME/.claude/projects/-Users-timtrailor-Documents-Claude-code/memory"
+    "$HOME/.claude/projects/-Users-timtrailor-code/memory"
+)
+for MEM in "${MEM_REPOS[@]}"; do
+    [ -d "$MEM/.git" ] || continue
+    LOCAL_HEAD=$(git -C "$MEM" rev-parse HEAD 2>/dev/null)
+    REMOTE_HEAD=$(ssh -o ConnectTimeout=5 "timtrailor@$OTHER" "[ -d '$MEM/.git' ] && git -C '$MEM' rev-parse HEAD 2>/dev/null" 2>/dev/null)
+
+    if [ -z "$REMOTE_HEAD" ]; then
+        emit "## memory repo $(basename "$(dirname "$MEM")") — not present on $OTHER_NAME"
+        continue
+    fi
+
+    if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
+        emit "## memory repo — clean (both at ${LOCAL_HEAD:0:8})"
+    else
+        DRIFT=1
+        # Count divergence if origin is fetched
+        git -C "$MEM" fetch origin main 2>/dev/null >/dev/null || true
+        AHEAD=$(git -C "$MEM" rev-list --count "$REMOTE_HEAD..HEAD" 2>/dev/null || echo "?")
+        BEHIND=$(git -C "$MEM" rev-list --count "HEAD..$REMOTE_HEAD" 2>/dev/null || echo "?")
+        emit "## memory repo — DRIFT"
+        emit "  local  ($HOSTNAME_NOW):  ${LOCAL_HEAD:0:8}  ($AHEAD commits ahead)"
+        emit "  remote ($OTHER_NAME):    ${REMOTE_HEAD:0:8}  ($BEHIND commits behind)"
+        emit "  Resolve: cd $MEM && git fetch && git merge <other-head>"
+        emit ""
+    fi
+done
+
 # Final
 if [ "$DRIFT" = "1" ]; then
     emit "VERDICT: DRIFT detected"
