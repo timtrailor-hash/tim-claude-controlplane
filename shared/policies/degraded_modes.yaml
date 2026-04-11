@@ -1,0 +1,105 @@
+# Degraded Mode Matrix — defines system behavior when dependencies fail
+#
+# Modes: GREEN (all healthy), YELLOW (degraded but safe), ORANGE (restricted),
+#        RED (critical — block dangerous operations)
+#
+# This file is consumed by hooks and skills to make degradation decisions.
+# It is NOT aspirational documentation — each rule here must have a
+# corresponding check in the verify.sh test suite.
+
+dependencies:
+  mac_mini:
+    check: "ssh -o ConnectTimeout=3 -o BatchMode=yes timtrailor@192.168.0.172 true"
+    failure_mode: YELLOW
+    behavior:
+      - "No memory sync (push or pull)"
+      - "No printer control via conversation_server"
+      - "No deploy to Mac Mini"
+      - "Local memory index only (may be stale)"
+      - "Laptop sessions continue with local-only context"
+    block: ["/deploy to mac-mini", "printer commands via server"]
+    allow: ["local file editing", "git operations", "local memory search"]
+
+  keychain:
+    check: "security find-generic-password -a ANTHROPIC_API_KEY -s tim-credentials -w >/dev/null 2>&1"
+    failure_mode: RED
+    behavior:
+      - "Block ALL API calls (Anthropic, OpenAI, Gemini, GitHub)"
+      - "Block ALL daemon starts that need credentials"
+      - "Block printer commands (can't authenticate to Moonraker if needed)"
+      - "Require manual keychain unlock before proceeding"
+    block: ["all API calls", "daemon starts", "deploy", "/review", "/debate"]
+    allow: ["local file reads", "git operations without push"]
+
+  memory_mcp:
+    check: "bash ~/.claude/hooks/memory_health_check.sh --strict"
+    failure_mode: YELLOW
+    behavior:
+      - "search_memory and search_exact unavailable"
+      - "Session continues without semantic memory"
+      - "Warn user on every search attempt"
+      - "Disable autonomous mode (can't recover context)"
+    block: ["/autonomous mode"]
+    allow: ["all other operations", "topic file reading via Read tool"]
+
+  printer_moonraker:
+    check: "curl -s --max-time 3 http://192.168.0.108:7125/printer/info"
+    failure_mode: ORANGE
+    behavior:
+      - "Block ALL printer commands (fail-closed)"
+      - "Cannot query print state"
+      - "Surface unreachability to user immediately"
+    block: ["all gcode commands", "printer status queries"]
+    allow: ["all non-printer operations"]
+
+  review_apis:
+    check: "curl -s --max-time 5 https://api.openai.com/v1/models -H 'Authorization: Bearer test' >/dev/null"
+    failure_mode: YELLOW
+    behavior:
+      - "/review falls back to claude-only mode"
+      - "/debate degrades to 2-way or claude-only"
+      - "Warn user that external review is unavailable"
+    block: []
+    allow: ["all operations — review is advisory, not blocking"]
+
+  conversation_server:
+    check: "curl -s --max-time 3 http://127.0.0.1:8081/health"
+    failure_mode: YELLOW
+    behavior:
+      - "Mobile app (ClaudeCode, TerminalApp) cannot connect"
+      - "Push notifications stop"
+      - "Laptop/SSH sessions unaffected"
+      - "unified-monitor should detect and alert"
+    block: ["mobile-originated sessions"]
+    allow: ["laptop sessions", "SSH access", "all server-side operations"]
+
+  google_workspace:
+    check: "MCP tool call to gcal_list_calendars or similar"
+    failure_mode: YELLOW
+    behavior:
+      - "Gmail, Calendar, Drive MCP tools unavailable"
+      - "Email notifications via SMTP still work (separate path)"
+      - "Autonomous mode email delivery unaffected"
+    block: []
+    allow: ["all operations — GWS is convenience, not safety"]
+
+operating_modes:
+  GREEN:
+    description: "All dependencies healthy"
+    restrictions: "None — full operation"
+
+  YELLOW:
+    description: "Non-critical dependency degraded"
+    restrictions: "Warn user, disable affected features, continue work"
+    trigger: "Any YELLOW dependency fails"
+
+  ORANGE:
+    description: "Safety-relevant dependency degraded"
+    restrictions: "Block operations in the failed dependency's domain"
+    trigger: "Printer unreachable during a session that needs printer access"
+
+  RED:
+    description: "Critical infrastructure failure"
+    restrictions: "Block all API calls, daemon management, and deployment"
+    trigger: "Keychain locked or unreachable"
+    action: "Require manual intervention before proceeding"
