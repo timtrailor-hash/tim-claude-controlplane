@@ -65,8 +65,17 @@ LISTENERS=$(lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk '$3 == "timtrailor" {p
 # Cron jobs
 CRON_JOBS=$(crontab -l 2>/dev/null | grep -v "^#" | grep -v "^$" || true)
 
-# Stray .git dirs in places that shouldn't have them
-STRAY_GITS=$(find ~/.claude/projects -maxdepth 4 -name ".git" -type d 2>/dev/null)
+# Stray .git dirs: only flag those WITHOUT a .git/config file (the broken ones
+# that cause git -C to resolve to a parent repo). A valid .git/config means
+# it's a real clone even if it's in an unexpected place.
+STRAY_GITS=""
+while IFS= read -r gitdir; do
+    [ -z "$gitdir" ] && continue
+    if [ ! -f "$gitdir/config" ]; then
+        STRAY_GITS="$STRAY_GITS$gitdir (no .git/config — orphaned)
+"
+    fi
+done < <(find ~/.claude/projects -maxdepth 4 -name ".git" -type d 2>/dev/null)
 
 # Status artifacts in /tmp
 STATUS_ARTIFACTS=$(ls -la /tmp/*.json /tmp/*_status* /tmp/health_* /tmp/printer_* 2>/dev/null | grep -v "^total")
