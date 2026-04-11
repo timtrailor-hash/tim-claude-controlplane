@@ -1,0 +1,76 @@
+# Printer Command Policy — machine-readable, consumed by hooks and skills
+#
+# This file is the SINGLE SOURCE OF TRUTH for what commands are allowed/blocked.
+# The printer_safety.py hook reads this at startup (with hardcoded fallback).
+# The /printer skill references this for validation.
+# Tests in scenarios/printer/ validate against this policy.
+#
+# Source incidents: lessons.md #1, #2, #5
+
+policy_version: 2
+last_updated: "2026-04-11"
+
+printers:
+  sovol_sv08_max:
+    ip: "192.168.0.108"
+    port: 7125
+    type: klipper
+    moonraker: true
+
+  snapmaker_u1:
+    ip: "192.168.0.69"
+    port: 7125
+    type: klipper
+    moonraker: true
+
+  bambu_a1:
+    type: bambu
+    protocol: mqtt
+
+safety:
+  # Commands ALWAYS blocked regardless of state — require Tim's verbal permission
+  always_blocked:
+    - FIRMWARE_RESTART    # destroyed 12h+ prints multiple times
+    - RESTART             # equivalent to FIRMWARE_RESTART
+    - SAVE_CONFIG         # triggers Klipper restart, kills active print
+
+  # Commands blocked during printing OR paused states
+  blocked_during_print:
+    - G28                 # homes axes — crashes into print
+    - PROBE               # moves head unpredictably
+    - QUAD_GANTRY_LEVEL   # moves head unpredictably
+    - BED_MESH_CALIBRATE  # moves head unpredictably
+
+  # Commands allowed during printing AND paused — the safe allowlist
+  allowed_during_print:
+    - M117                # display message (no physical effect)
+    - SET_GCODE_OFFSET    # Z offset adjustment
+    - M220                # speed factor (50-150%)
+    - M221                # flow rate (80-120%)
+    - SET_FAN_SPEED       # fan control
+    - PAUSE               # pause print
+    - RESUME              # resume print
+    - CANCEL_PRINT_CONFIRMED  # cancel (explicit name to prevent accidental)
+
+  # Fail-closed behavior when printer state is unknown
+  unknown_state_policy: "deny_unless_in_allowlist"
+
+  # One-shot permission mechanism for FIRMWARE_RESTART
+  # When Tim verbally approves, Claude creates this file; hook checks + deletes it
+  one_shot_permission:
+    file: "/tmp/claude-firmware-restart-permitted"
+    max_age_seconds: 60
+    commands: [FIRMWARE_RESTART, RESTART]
+
+enforcement:
+  # The printer_safety.py hook in PreToolUse:Bash is the PRIMARY enforcer
+  primary: "~/.claude/hooks/printer_safety.py"
+
+  # The protected_path_hook.sh has SECONDARY patterns for printer safety
+  secondary: "~/.claude/hooks/protected_path_hook.sh"
+
+  # Audit trail
+  audit_log: "~/.claude/printer_audit.log"
+
+  # Policy source — this file
+  policy_file: "~/.claude/policies/printer_policy.yaml"
