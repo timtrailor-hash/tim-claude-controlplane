@@ -1,0 +1,29 @@
+# Printer safety configuration — source of truth for PreToolUse hook
+# Referenced by: shared/hooks/printer_safety.py
+
+[printers.sv08_max]
+ip = "192.168.0.108"
+type = "klipper"
+moonraker_port = 7125
+
+[printers.snapmaker_u1]
+ip = "192.168.0.69"
+type = "klipper"
+moonraker_port = 7125
+
+[printers.bambu_a1]
+ip = "192.168.0.214"
+type = "bambu"
+
+[safety]
+always_blocked = ["FIRMWARE_RESTART", "RESTART"]
+printing_allowlist = [
+    "M117",
+    "SET_GCODE_OFFSET",
+    "M220",
+    "M221",
+    "SET_FAN_SPEED",
+    "PAUSE",
+    "RESUME",
+    "CANCEL_PRINT_CONFIRMED",
+]
