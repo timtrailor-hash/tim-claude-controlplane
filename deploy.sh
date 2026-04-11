@@ -53,6 +53,10 @@ fi
 
 CHANGES=0
 
+# Backups go OUTSIDE ~/.claude/ managed dirs so drift_check doesn't trip on them
+BACKUP_DIR="$HOME/.claude/.deploy-backups"
+mkdir -p "$BACKUP_DIR"
+
 # Symlink shared directories into ~/.claude/
 for sub in rules hooks agents mcp-launchers; do
     SRC="$SHARED/$sub"
@@ -65,8 +69,7 @@ for sub in rules hooks agents mcp-launchers; do
         if [ "$DRY_RUN" = "1" ]; then
             echo "  $sub: WOULD replace directory with symlink → $SRC"
         else
-            # Backup existing, replace with symlink
-            mv "$DST" "$DST.pre-deploy-$(date +%s)"
+            mv "$DST" "$BACKUP_DIR/${sub}.pre-deploy-$(date +%s)"
             ln -s "$SRC" "$DST"
             echo "  $sub: replaced with symlink (old backed up)"
             CHANGES=1
@@ -95,7 +98,7 @@ if [ -d "$SHARED/skills" ]; then
             if [ "$DRY_RUN" = "1" ]; then
                 echo "  skill/$skill_name: WOULD replace with symlink"
             else
-                mv "$DST" "$DST.pre-deploy-$(date +%s)"
+                mv "$DST" "$BACKUP_DIR/skill-${skill_name}.pre-deploy-$(date +%s)"
                 ln -s "$skill_dir" "$DST"
                 echo "  skill/$skill_name: replaced with symlink"
                 CHANGES=1

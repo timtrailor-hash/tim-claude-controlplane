@@ -78,7 +78,7 @@ for sub in rules hooks agents skills mcp-launchers; do
     [ -d "$LOCAL_DIR" ] || continue
 
     # Get local file→md5 map (sorted, only regular files)
-    LOCAL_HASHES=$(find -L "$LOCAL_DIR" -type f -not -name "*.log" -not -name "*.cache" -not -name ".DS_Store" -not -name "*.pyc" -not -path "*/__pycache__/*" 2>/dev/null \
+    LOCAL_HASHES=$(find -L "$LOCAL_DIR" -type f -not -name "*.log" -not -name "*.cache" -not -name ".DS_Store" -not -name "*.pyc" -not -path "*/__pycache__/*" -not -path "*.pre-deploy-*" 2>/dev/null \
         | sort | while read -r f; do
             REL=${f#$LOCAL_DIR/}
             HASH=$(md5 -q "$f" 2>/dev/null)
@@ -211,14 +211,18 @@ rm -f "$REMOTE_SETTINGS_TMP"
 # This catches Pattern 17 at the memory layer: both machines auto-commit to
 # their local clone of the memory repo, diverging silently. We compare
 # HEAD commits and count how many each side is ahead/behind.
+# Canonical memory repo (matches the path CLAUDE.md points at on both machines).
+# Only one path — drift between stale clones is outside scope. We verify the
+# clone is genuine by checking .git/config exists (catches stray .git dirs).
 MEM_REPOS=(
-    "$HOME/.claude/projects/-Users-timtrailor-Documents-Claude-code/memory"
     "$HOME/.claude/projects/-Users-timtrailor-code/memory"
 )
 for MEM in "${MEM_REPOS[@]}"; do
-    [ -d "$MEM/.git" ] || continue
+    [ -f "$MEM/.git/config" ] || continue
+    TOPLEVEL=$(git -C "$MEM" rev-parse --show-toplevel 2>/dev/null)
+    [ "$TOPLEVEL" = "$MEM" ] || continue
     LOCAL_HEAD=$(git -C "$MEM" rev-parse HEAD 2>/dev/null)
-    REMOTE_HEAD=$(ssh -o ConnectTimeout=5 "timtrailor@$OTHER" "[ -d '$MEM/.git' ] && git -C '$MEM' rev-parse HEAD 2>/dev/null" 2>/dev/null)
+    REMOTE_HEAD=$(ssh -o ConnectTimeout=5 "timtrailor@$OTHER" "[ -f '$MEM/.git/config' ] && git -C '$MEM' rev-parse HEAD 2>/dev/null" 2>/dev/null)
 
     if [ -z "$REMOTE_HEAD" ]; then
         emit "## memory repo $(basename "$(dirname "$MEM")") — not present on $OTHER_NAME"
