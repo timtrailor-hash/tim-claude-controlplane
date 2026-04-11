@@ -23,6 +23,70 @@ This is the right tool for irreversible decisions: architecture changes, daemon 
 
 Note: `/debate` defaults to **full models** because the whole point is high-stakes decisions. Use `+mini` only if you're testing the workflow itself.
 
+## MANDATORY INPUT GATE — change impact map for live-system changes
+
+**Added 2026-04-11 after the retro debate on the 7-phase rebuild.** The rebuild was unanimously blessed by a prior /debate, then produced four red flags on Tim's iOS app within hours of the first real check. Root cause: **/debate reviewed the design in isolation from its operational blast radius**. All three reviewers (Claude, Gemini, GPT-5.4) converged on this fix.
+
+Before running `/debate` on anything that touches a live system (existing services, files on running machines, cross-host state, monitors, memory repos, settings.json), the orchestrating session MUST produce a `change_impact_map.md` and attach it to the context. The impact map declares every downstream consumer of every surface the change touches. `/debate` refuses to start if the map is obviously incomplete.
+
+### What counts as "live-system impact"
+Any of the following triggers the requirement:
+- Editing or deleting files on Mac Mini
+- Renaming paths, moving directories, refactoring file locations
+- Modifying any `~/.claude/` file on either machine
+- Touching `machines/<host>/settings.json`, `system_map.yaml`, `services.yaml`, `launchagents/*.plist`
+- Changing any LaunchAgent script (referenced by any plist)
+- Modifying `health_check.py`, `verify.sh`, `drift_check.sh`, `deploy.sh`
+- Memory topic file merges or deletions
+
+### change_impact_map.md format
+
+Minimal acceptable format (inline in debate context, no separate file needed if short):
+
+```markdown
+## Change Impact Map
+
+### Changed surfaces
+- path/to/file1 — what's changing
+- path/to/file2 — what's changing
+
+### Downstream consumers (per surface)
+For each changed surface, list every file/service/monitor that references it.
+Run `grep -rl '<surface>' ~/code ~/.claude` on BOTH machines. Paste the output here.
+
+- path/to/file1 references found:
+  - consumer A (file:line) — nature of reference
+  - consumer B (file:line) — nature of reference
+- path/to/file2 references found: (none)
+
+### Atomicity plan
+How each consumer is updated alongside the surface change, or explicitly marked as intentionally broken.
+
+### Rollback
+Single command to revert the whole change in case of failure.
+```
+
+### Enforcement
+`/debate` Step 1 (Gather context) now verifies the impact map is present and non-trivially populated. If missing or if the "Downstream consumers" section is empty for non-greenfield changes, the orchestrating session MUST stop and either (a) produce the map, or (b) explicitly justify why this is a greenfield change with no live-system impact.
+
+This does NOT apply to pure design-review debates ("should we decompose conversation_server.py?") — those are concept-level and have no impact map until a concrete plan exists. It applies to IMPLEMENTATION debates.
+
+## REVIEWER ROLES — one seat is "runtime / blast-radius"
+
+**Added 2026-04-11.** In a 3-model debate, the natural bias of all three reviewers is toward critiquing the design. This leaves the operational blast radius unexamined — exactly the gap that produced tonight's failures.
+
+From Round 1+ onward (after blind Round 0 has established independent positions), the orchestrating Claude session assigns ONE reviewer (itself or Gemini) the explicit role of **runtime / blast-radius reviewer**. That reviewer's job for the round:
+
+1. Do NOT critique the architecture or design choices.
+2. Walk the dependency graph out from every changed surface.
+3. Ask: "What consumes this? What's the staleness horizon of every consumer? What's the first user-visible symptom if this change is wrong? Which existing tests would catch that symptom, and which would not?"
+4. List explicitly unchecked consumers.
+5. Approve only if the set of unchecked consumers is empty OR each unchecked item is explicitly risk-accepted.
+
+The other two reviewers critique design, security, correctness as normal. The blast-radius seat is added, not substituted.
+
+The orchestrator should rotate which model plays the blast-radius seat across debates so no single model's blind spots dominate.
+
 ## Pipeline
 
 ```

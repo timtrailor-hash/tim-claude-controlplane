@@ -143,6 +143,16 @@
                         "type": "command",
                         "command": "bash /Users/timtrailor/.claude/hooks/printer-safety-check.sh",
                         "timeout": 8
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/rename_guard.sh",
+                        "timeout": 10
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash /Users/timtrailor/.claude/hooks/commit_guard.sh",
+                        "timeout": 10
                     }
                 ],
                 "matcher": "Bash"
