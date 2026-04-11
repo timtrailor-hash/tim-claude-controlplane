@@ -1,0 +1,86 @@
+# system_map.yaml — executable source of truth for laptop
+#
+# The laptop is a thin client for the Claude Code infrastructure — it does
+# not run the LaunchAgents that serve Tim's mobile app or printer stack.
+# Those live on Mac Mini. This file declares what DOES exist on the laptop.
+#
+# Schema version: 1
+
+schema_version: 1
+machine: laptop
+updated: 2026-04-11
+
+# ---------------------------------------------------------------------------
+# SERVICES — no persistent LaunchAgents on the laptop currently.
+# ---------------------------------------------------------------------------
+services: {}
+
+# ---------------------------------------------------------------------------
+# CRON JOBS — none currently. Memory sync hooks run via settings.json, not cron.
+# ---------------------------------------------------------------------------
+cron_jobs: {}
+
+# ---------------------------------------------------------------------------
+# CANONICAL PATHS — valid locations declared for laptop.
+# ---------------------------------------------------------------------------
+canonical_paths:
+  code_root: /Users/timtrailor/code
+  claude_home: /Users/timtrailor/.claude
+  memory_repo: /Users/timtrailor/.claude/projects/-Users-timtrailor-code/memory
+  memory_server_data: /Users/timtrailor/code/memory_server_data
+  credentials: /Users/timtrailor/code/credentials.py
+  controlplane_repo: /Users/timtrailor/code/tim-claude-controlplane
+  launchagents_dir: /Users/timtrailor/Library/LaunchAgents
+  keychain_pass: /Users/timtrailor/.keychain_pass
+
+# ---------------------------------------------------------------------------
+# USER-VISIBLE OUTPUTS — none; laptop does not serve user-facing monitors.
+# ---------------------------------------------------------------------------
+user_visible_outputs: {}
+
+# ---------------------------------------------------------------------------
+# MEMORY REPOS — mirror Mac Mini's canonical state.
+# ---------------------------------------------------------------------------
+memory_repos:
+
+  topics:
+    path: /Users/timtrailor/.claude/projects/-Users-timtrailor-code/memory
+    remote: git@github.com:timtrailor-hash/tim-memory.git
+    sync_direction: bidirectional
+    canonical_branch: main
+
+# ---------------------------------------------------------------------------
+# HOOKS — same as Mac Mini (symlinked from shared/hooks/).
+# ---------------------------------------------------------------------------
+hooks:
+
+  protected_path_hook:
+    path: shared/hooks/protected_path_hook.sh
+    type: PreToolUse
+    matcher: Bash
+    test_file: scenarios/test_behavioral.py::TestProtectedPathBehavioral
+
+  credential_leak_hook:
+    path: shared/hooks/credential_leak_hook.sh
+    type: PreToolUse
+    matcher: Write|Edit
+    test_file: scenarios/test_behavioral.py::TestCredentialLeakBehavioral
+
+  lint_hook:
+    path: shared/hooks/lint_hook.sh
+    type: PostToolUse
+    matcher: Write|Edit
+    test_file: scenarios/test_behavioral.py::TestLintHookBehavioral
+
+# ---------------------------------------------------------------------------
+# EXTERNAL DEPENDENCIES
+# ---------------------------------------------------------------------------
+external_dependencies:
+  - name: mac_mini
+    failure_mode: YELLOW
+  - name: anthropic_api
+    failure_mode: YELLOW
+  - name: github
+    failure_mode: YELLOW
+
+deprecated: {}

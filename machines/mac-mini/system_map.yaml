@@ -1,0 +1,414 @@
+# system_map.yaml — executable source of truth for Mac Mini
+#
+# This file is the CONSTITUTION of the Mac Mini's Claude Code infrastructure.
+# Every downstream tool (deploy.sh, verify.sh, drift_check.sh, health_check.py,
+# system_inventory.sh) reads from this file. No consumer may carry a hardcoded
+# copy of anything declared here.
+#
+# Change-control rule: any commit that modifies this file MUST carry a
+# `Reviewed-By:` trailer (enforced by pre-commit hook
+# shared/hooks/authority_map_guard.sh). The pre-commit hook refuses unsigned
+# changes to this file.
+#
+# Pattern 17 (observability drift) cannot recur for anything declared here,
+# because the consumers read from this file at runtime.
+#
+# Schema version: 1 (keep stable; add fields, don't rename/remove without
+# migration)
+
+schema_version: 1
+machine: mac-mini
+updated: 2026-04-11
+
+# ---------------------------------------------------------------------------
+# SERVICES — every LaunchAgent that MUST be loaded on this machine.
+# health_check.py reads the keys from this section as its LAUNCHAGENTS list.
+# deploy.sh verifies each has a plist file in machines/mac-mini/launchagents/.
+# ---------------------------------------------------------------------------
+services:
+
+  conversation-server:
+    label: com.timtrailor.conversation-server
+    purpose: "WebSocket Claude session broker + tmux HTTP proxy + APNs push"
+    owner: conversation_server.py
+    mode: KeepAlive
+    code: ~/code/claude-mobile/conversation_server.py
+    port: 8081
+    secrets: [AUTH_TOKEN, APNS_KEY_ID, APNS_TEAM_ID]
+    failure_mode: YELLOW
+    failure_impact: "mobile access lost, laptop/SSH still works"
+    probe:
+      type: http
+      url: http://127.0.0.1:8081/health
+      expect_status: 200
+      expect_json_keys: [ok, uptime_s]
+      timeout_s: 5
+    notes: "4851-line monolith — scheduled for Phase 3 decomposition"
+
+  governors:
+    label: com.timtrailor.governors
+    purpose: "Castle Federation Ofsted Streamlit app"
+    owner: ofsted-agent/app.py
+    mode: KeepAlive
+    code: ~/code/ofsted-agent/app.py
+    port: 8501
+    secrets: [GEMINI_API_KEY]
+    failure_mode: YELLOW
+    failure_impact: "governors app unavailable, no other impact"
+    probe:
+      type: http
+      url: http://127.0.0.1:8501/_stcore/health
+      expect_status: 200
+      timeout_s: 5
+
+  backup-to-drive:
+    label: com.timtrailor.backup-to-drive
+    purpose: "Nightly backup of code, configs, credentials, memory, certs to Google Drive"
+    owner: backup_to_drive.py
+    mode: StartCalendarInterval 03:00
+    code: ~/code/backup_to_drive.py
+    secrets: [GCP_SERVICE_ACCOUNT]
+    failure_mode: YELLOW
+    failure_impact: "backup staleness, alert after 26h"
+    probe:
+      type: file_age
+      path: ~/code/.backup_manifest.json
+      max_age_hours: 48
+
+  printer-snapshots:
+    label: com.timtrailor.printer-snapshots
+    purpose: "Adaptive printer status poller (30s printing, 5min idle) — READ-ONLY"
+    owner: printer_daemon.py
+    mode: KeepAlive
+    code: ~/code/sv08-print-tools/printer_daemon.py
+    secrets: []
+    failure_mode: YELLOW
+    failure_impact: "printer status stale, no active harm"
+    probe:
+      type: file_age
+      path: /tmp/printer_status/status.json
+      max_age_minutes: 10
+    notes: "MUST never send commands to printer — read-only"
+
+  token-refresh:
+    label: com.timtrailor.token-refresh
+    purpose: "OAuth token refresh for Google Workspace"
+    owner: token_refresh.py
+    mode: StartInterval 1800
+    code: ~/code/token_refresh.py
+    secrets: [GOOGLE_OAUTH_CLIENT_SECRET]
+    failure_mode: YELLOW
+    failure_impact: "OAuth expires, GWS MCP tools stop working"
+    probe:
+      type: file_age
+      path: ~/code/google_token.json
+      max_age_hours: 2
+
+  governorhub-sync:
+    label: com.timtrailor.governorhub-sync
+    purpose: "Weekly GovernorHub document download + context rebuild"
+    owner: governorhub_sync.py
+    mode: StartCalendarInterval Monday 06:00
+    code: ~/code/ofsted-agent/governorhub_sync.py
+    secrets: [GovernorHub session cookies via keychain]
+    failure_mode: YELLOW
+    failure_impact: "stale context, alert after 8 days"
+    probe:
+      type: file_age
+      path: ~/code/governorhub_sync.log
+      max_age_hours: 192
+
+  ttyd:
+    label: com.timtrailor.ttyd
+    purpose: "Browser-based terminal access"
+    owner: ttyd
+    mode: KeepAlive
+    binary: /opt/homebrew/bin/ttyd
+    port: 7681
+    secrets: []
+    failure_mode: YELLOW
+    failure_impact: "browser terminal unavailable"
+    probe:
+      type: http
+      url: http://127.0.0.1:7681/
+      expect_status: 200
+      timeout_s: 5
+
+  ttyd-tunnel:
+    label: com.timtrailor.ttyd-tunnel
+    purpose: "Cloudflare tunnel for browser terminal access (external)"
+    owner: cloudflared
+    mode: KeepAlive
+    binary: /opt/homebrew/bin/cloudflared
+    secrets: [Cloudflare tunnel token]
+    failure_mode: YELLOW
+    failure_impact: "browser terminal not reachable externally"
+    probe:
+      type: process
+      name: cloudflared
+    notes: "Evaluate: still needed with Tailscale — as of 2026-04-11 still running"
+
+  streamlit-https:
+    label: com.timtrailor.streamlit-https
+    purpose: "HTTPS proxy for Governors Streamlit app"
+    owner: streamlit_https_proxy.py
+    mode: KeepAlive
+    code: ~/code/streamlit_https_proxy.py
+    secrets: [TLS certs in ~/code/certs/]
+    failure_mode: YELLOW
+    failure_impact: "governors app accessible via HTTP only"
+    probe:
+      type: process
+      name: streamlit_https_proxy
+    notes: "Evaluate: Streamlit native HTTPS or Caddy"
+
+  unlock-keychain:
+    label: com.timtrailor.unlock-keychain
+    purpose: "Unlock login keychain at boot for headless secret access"
+    owner: security CLI
+    mode: RunAtLoad
+    secrets: ["~/.keychain_pass (HARDENED: chmod 600, documented risk acceptance)"]
+    failure_mode: RED
+    failure_impact: "all secrets inaccessible, all daemons fail to start"
+    probe:
+      type: keychain
+      service: tim-credentials
+      account: ANTHROPIC_API_KEY
+    risk_note: "~/.keychain_pass is a plaintext root-of-trust bypass. Accepted risk for headless Mac Mini. chmod 600, excluded from unencrypted backups."
+
+  health-check:
+    label: com.timtrailor.health-check
+    purpose: "Hourly health-check monitor — observe and alert"
+    owner: health_check.py
+    mode: StartInterval 3600
+    code: ~/code/health_check.py
+    secrets: [SMTP_PASS]
+    failure_mode: YELLOW
+    failure_impact: "monitoring gap (iOS app may show stale data)"
+    probe:
+      type: file_age
+      path: /tmp/health_check_results.json
+      max_age_hours: 2
+    notes: "Output /tmp/health_check_results.json is the iOS Claude Control app's data source"
+
+  bgt-date-monitor:
+    label: com.timtrailor.bgt-date-monitor
+    purpose: "BGT ticket date monitoring"
+    owner: bgt_date_monitor.py
+    mode: StartInterval 600
+    code: ~/code/bgt_date_monitor.py
+    secrets: []
+    failure_mode: LOW
+    failure_impact: "ticket alert delayed"
+    probe:
+      type: process
+      name: bgt_date_monitor
+    notes: "Evaluate: 10-min polling necessary? Consider webhook or hourly."
+
+# ---------------------------------------------------------------------------
+# CRON JOBS — scheduled tasks not run as LaunchAgents.
+# ---------------------------------------------------------------------------
+cron_jobs:
+
+  reboot_services:
+    schedule: "@reboot"
+    command: /Users/timtrailor/.local/bin/start_services.sh
+    purpose: "Start keychain + ttyd at boot"
+
+  memory_health_check:
+    schedule: "0 * * * *"
+    command: /bin/bash /Users/timtrailor/.claude/hooks/memory_health_check.sh --strict
+    log: /tmp/memory_health_cron.log
+    purpose: "Hourly functional memory probe (queries ChromaDB)"
+
+  memory_index_all:
+    schedule: "30 * * * *"
+    command: /opt/homebrew/bin/python3.11 /Users/timtrailor/code/memory_index_all.py
+    log: /tmp/memory_index_cron.log
+    purpose: "Hourly transcript indexing for bidirectional memory sync"
+
+  drift_check:
+    schedule: "0 9 * * 1"
+    command: /bin/bash /Users/timtrailor/.claude/hooks/drift_check.sh --strict
+    log: /tmp/drift_check_cron.log
+    purpose: "Weekly cross-machine ~/.claude/ drift detection"
+
+# ---------------------------------------------------------------------------
+# CANONICAL PATHS — valid locations declared per machine.
+# Consumers may not reference paths outside this list.
+# ---------------------------------------------------------------------------
+canonical_paths:
+  code_root: /Users/timtrailor/code
+  claude_home: /Users/timtrailor/.claude
+  memory_repo: /Users/timtrailor/.claude/projects/-Users-timtrailor-code/memory
+  memory_server_data: /Users/timtrailor/code/memory_server_data
+  credentials: /Users/timtrailor/code/credentials.py
+  controlplane_repo: /Users/timtrailor/code/tim-claude-controlplane
+  launchagents_dir: /Users/timtrailor/Library/LaunchAgents
+  keychain_pass: /Users/timtrailor/.keychain_pass
+
+# ---------------------------------------------------------------------------
+# USER-VISIBLE OUTPUTS — files the iOS app and other consumers read.
+# deploy.sh post-hook must verify each of these is fresh after deploy.
+# ---------------------------------------------------------------------------
+user_visible_outputs:
+
+  health_check_results:
+    path: /tmp/health_check_results.json
+    producer: com.timtrailor.health-check
+    consumer: "iOS Claude Control app /infrastructure-health endpoint"
+    format: json
+    refresh_interval_s: 3600
+    max_stale_s: 7200
+    required_on_deploy: true
+    refresh_command: /opt/homebrew/bin/python3.11 /Users/timtrailor/code/health_check.py
+
+  printer_status:
+    path: /tmp/printer_status/status.json
+    producer: com.timtrailor.printer-snapshots
+    consumer: "iOS Claude Control app Printer tab"
+    format: json
+    refresh_interval_s: 30
+    max_stale_s: 600
+    required_on_deploy: false
+
+  conversation_server_health:
+    path: /dev/null
+    producer: com.timtrailor.conversation-server
+    consumer: "iOS Claude Control app live /health poll"
+    format: http
+    probe_url: http://127.0.0.1:8081/health
+    expect_status: 200
+    required_on_deploy: true
+
+# ---------------------------------------------------------------------------
+# MEMORY REPOS — canonical memory state.
+# drift_check.sh reads this to know what repos to compare.
+# ---------------------------------------------------------------------------
+memory_repos:
+
+  topics:
+    path: /Users/timtrailor/.claude/projects/-Users-timtrailor-code/memory
+    remote: git@github.com:timtrailor-hash/tim-memory.git
+    sync_direction: bidirectional
+    canonical_branch: main
+
+  chromadb:
+    path: /Users/timtrailor/code/memory_server_data/chroma
+    producer: memory_index_all.py
+    regenerable_from: /Users/timtrailor/.claude/projects/*/*.jsonl
+    rebuild_command: /bin/bash /Users/timtrailor/code/rebuild_index.sh
+    min_chunks: 1000
+
+# ---------------------------------------------------------------------------
+# HOOKS — PreToolUse and PostToolUse hooks wired in settings.json.
+# verify.sh cross-checks this against the live settings.json and the
+# shared/hooks/ directory.
+# ---------------------------------------------------------------------------
+hooks:
+
+  protected_path_hook:
+    path: shared/hooks/protected_path_hook.sh
+    type: PreToolUse
+    matcher: Bash
+    purpose: "Block launchctl state-changing, sudo reboot, chflags, plutil -extract, SSH printer dangerous gcode, git push public without approval"
+    test_file: scenarios/test_behavioral.py::TestProtectedPathBehavioral
+
+  credential_leak_hook:
+    path: shared/hooks/credential_leak_hook.sh
+    type: PreToolUse
+    matcher: Write|Edit
+    purpose: "Block API keys in tracked files"
+    test_file: scenarios/test_behavioral.py::TestCredentialLeakBehavioral
+
+  audit_log_hook:
+    path: shared/hooks/audit_log_hook.sh
+    type: PostToolUse
+    matcher: Bash
+    purpose: "Log all printer commands"
+    test_file: scenarios/test_behavioral.py::TestAuditLogBehavioral
+
+  lint_hook:
+    path: shared/hooks/lint_hook.sh
+    type: PostToolUse
+    matcher: Write|Edit
+    purpose: "Run ruff + semgrep on Python edits (advisory)"
+    test_file: scenarios/test_behavioral.py::TestLintHookBehavioral
+
+  printer_safety_check:
+    path: shared/hooks/printer-safety-check.sh
+    type: PreToolUse
+    matcher: Bash
+    purpose: "Block dangerous gcode during active prints (allowlist of 7 commands)"
+    test_file: shared/hooks/test_printer_safety.py
+
+  authority_map_guard:
+    path: shared/hooks/authority_map_guard.sh
+    type: PreToolUse
+    matcher: Bash
+    purpose: "Block commits touching system_map.yaml without Reviewed-By: trailer"
+    test_file: null
+
+  rename_removal_gate:
+    path: shared/hooks/rename_removal_gate.sh
+    type: PreToolUse
+    matcher: Bash
+    purpose: "Block rm -rf / git mv of files referenced by other files without # verified: trailer"
+    test_file: null
+
+  doc_loss_gate:
+    path: shared/hooks/doc_loss_gate.sh
+    type: PreToolUse
+    matcher: Bash
+    purpose: "Block topic file commits shrinking by >20 lines without Removed-sections: trailer"
+    test_file: null
+
+  session_trailer_gate:
+    path: shared/hooks/session_trailer_gate.sh
+    type: PreToolUse
+    matcher: Bash
+    purpose: "Warn/block commits missing Session: YYYY-MM-DD (id) trailer"
+    test_file: null
+
+# ---------------------------------------------------------------------------
+# EXTERNAL DEPENDENCIES — things we consume that can fail.
+# Maps to shared/policies/degraded_modes.yaml behavior.
+# ---------------------------------------------------------------------------
+external_dependencies:
+  - name: keychain
+    failure_mode: RED
+  - name: mac_mini_network
+    failure_mode: YELLOW
+  - name: printer_moonraker
+    failure_mode: ORANGE
+  - name: anthropic_api
+    failure_mode: YELLOW
+  - name: google_workspace
+    failure_mode: YELLOW
+  - name: github
+    failure_mode: YELLOW
+
+# ---------------------------------------------------------------------------
+# DEPRECATED / REMOVED — historical record.
+# verify.sh asserts none of these are still loaded.
+# ---------------------------------------------------------------------------
+deprecated:
+
+  claude-wrapper:
+    status: "REMOVED 2026-04-11 (Phase 4)"
+    reason: "Replaced by conversation-server. Legacy Flask wrapper."
+    removed_at_commit: Phase 4 rebuild
+
+  memory-indexer:
+    status: "REMOVED 2026-04-11 (Phase 4)"
+    reason: "Duplicate authority — cron job at :30 already handles indexing"
+    removed_at_commit: Phase 4 rebuild
+
+  system-monitor:
+    status: "NEVER DEPLOYED — plist was stale in repo, removed 2026-04-11"
+    reason: "Superseded by health-check + future unified-monitor"
+    removed_at_commit: "Post-audit fixes 2026-04-11"
+
+  reminder-sv08-fix:
+    status: "REMOVED 2026-04-11 (Phase 4)"
+    reason: "Expired one-shot reminder"

@@ -137,45 +137,45 @@ else
     check "services.yaml exists" "1"
 fi
 
-# 6b. Services manifest ↔ plists ↔ health_check.py three-way alignment
+# 6b. system_map.yaml ↔ plists ↔ health_check.py three-way alignment
 #
-# Pattern 17 (observability drift): services.yaml is the declared source of
-# truth, but downstream consumers (plists, monitors) silently drift. This
-# check enforces that all three agree, so the next Phase 4-style deletion
-# can't break the monitor.
+# Pattern 17 (observability drift): system_map.yaml is the declared source of
+# truth (for both mac-mini and laptop). This check enforces that the services
+# section matches the plist files on disk AND matches health_check.py's
+# runtime list. When all three agree, no Phase-4-style deletion can silently
+# break the monitor.
+#
+# This check always targets mac-mini's map (even from the laptop) because the
+# services/plists/health_check triad only exists on mac-mini.
 if command -v /opt/homebrew/bin/python3.11 >/dev/null 2>&1; then
-    ALIGN_RESULT=$(/opt/homebrew/bin/python3.11 - "$REPO_DIR" <<'PYEOF' 2>&1
-import os, sys, re
+    ALIGN_RESULT=$(SYSTEM_MAP_MACHINE=mac-mini /opt/homebrew/bin/python3.11 - "$REPO_DIR" <<'PYEOF' 2>&1
+import os, sys, re, subprocess
 from pathlib import Path
 
 repo = Path(sys.argv[1])
-svc_yaml = repo / "machines" / "mac-mini" / "services.yaml"
+sys.path.insert(0, str(repo / "shared" / "lib"))
+import system_map
+
+# Source of truth: system_map.yaml service labels
+declared = set(system_map.service_labels())
+declared_short = {lbl.replace("com.timtrailor.", "") for lbl in declared}
+
+# Also load the deprecated list so we can flag any deprecated service that's
+# still on disk or in the monitor.
+deprecated_short = set()
+for name, entry in (system_map.deprecated() or {}).items():
+    deprecated_short.add(name)
+
+# Plist basenames on disk in the controlplane repo
 plist_dir = repo / "machines" / "mac-mini" / "launchagents"
-
-# Parse services.yaml services: section (top-level entries under `services:`)
-in_services = False
-declared = set()
-for line in svc_yaml.read_text().splitlines():
-    if line.rstrip() == "services:":
-        in_services = True
-        continue
-    if in_services:
-        if line and not line.startswith(" "):
-            break
-        m = re.match(r"^  ([a-z][a-z0-9\-]*):\s*$", line)
-        if m:
-            declared.add(m.group(1))
-
-# Plist basenames
 plists = {p.stem.replace("com.timtrailor.", "")
           for p in plist_dir.glob("com.timtrailor.*.plist")}
 
-# health_check.py LAUNCHAGENTS list (on Mac Mini, via SSH if not local)
+# health_check.py LAUNCHAGENTS runtime value
 hc_path = Path("/Users/timtrailor/code/health_check.py")
 if hc_path.exists():
     hc_text = hc_path.read_text()
 else:
-    import subprocess
     try:
         hc_text = subprocess.check_output(
             ["ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes",
@@ -184,26 +184,44 @@ else:
     except Exception:
         hc_text = ""
 
-monitored = set()
+monitored_short = set()
 if hc_text:
     m = re.search(r"LAUNCHAGENTS\s*=\s*\[(.*?)\]", hc_text, re.DOTALL)
     if m:
-        monitored = set(re.findall(r"com\.timtrailor\.([a-z][a-z0-9\-]*)", m.group(1)))
+        monitored_short = set(
+            re.findall(r"com\.timtrailor\.([a-z][a-z0-9\-]*)", m.group(1))
+        )
 
 issues = []
-if declared != plists:
-    issues.append(f"services.yaml vs plists: only_in_yaml={sorted(declared-plists)} only_in_plists={sorted(plists-declared)}")
-if monitored and declared != monitored:
-    issues.append(f"services.yaml vs health_check.py LAUNCHAGENTS: only_in_yaml={sorted(declared-monitored)} only_in_monitor={sorted(monitored-declared)}")
-if not monitored:
-    issues.append("could not parse health_check.py LAUNCHAGENTS (not reachable?)")
+if declared_short != plists:
+    only_yaml = sorted(declared_short - plists)
+    only_plists = sorted(plists - declared_short)
+    issues.append(
+        f"system_map.yaml vs plists: only_in_map={only_yaml} only_in_plists={only_plists}"
+    )
+if monitored_short and declared_short != monitored_short:
+    only_yaml = sorted(declared_short - monitored_short)
+    only_mon = sorted(monitored_short - declared_short)
+    issues.append(
+        f"system_map.yaml vs health_check.py LAUNCHAGENTS: only_in_map={only_yaml} only_in_monitor={only_mon}"
+    )
+if not monitored_short:
+    issues.append("could not parse health_check.py LAUNCHAGENTS (mac-mini not reachable?)")
+
+# Extra guard: no deprecated service may appear in plists or monitor
+dep_on_disk = deprecated_short & plists
+dep_in_monitor = deprecated_short & monitored_short
+if dep_on_disk:
+    issues.append(f"deprecated services still on disk: {sorted(dep_on_disk)}")
+if dep_in_monitor:
+    issues.append(f"deprecated services still in health_check monitor: {sorted(dep_in_monitor)}")
 
 for i in issues:
     print(i)
 PYEOF
 )
     if [ -z "$ALIGN_RESULT" ]; then
-        check "services.yaml ↔ plists ↔ health_check.py aligned" "0"
+        check "system_map.yaml ↔ plists ↔ health_check.py aligned" "0"
     else
         while IFS= read -r line; do
             [ -n "$line" ] && check "alignment drift: $line" "1"
