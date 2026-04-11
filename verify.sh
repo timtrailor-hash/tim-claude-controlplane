@@ -134,9 +134,9 @@ fi
 
 # 7. Run pytest scenarios (unless --quick)
 if [ "$QUICK" = "0" ] && [ -d "$REPO_DIR/scenarios" ]; then
-    if command -v pytest >/dev/null 2>&1; then
+    if /opt/homebrew/bin/python3.11 -m pytest --version 2>/dev/null >/dev/null 2>&1; then
         echo "  Running safety scenarios..."
-        if pytest "$REPO_DIR/scenarios/" -q --tb=short 2>&1 | tail -5; then
+        if /opt/homebrew/bin/python3.11 -m pytest "$REPO_DIR/scenarios/" -q --tb=short 2>&1 | tail -5; then
             check "safety scenarios" "0"
         else
             check "safety scenarios" "1"

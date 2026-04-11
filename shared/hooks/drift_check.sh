@@ -78,7 +78,7 @@ for sub in rules hooks agents skills mcp-launchers; do
     [ -d "$LOCAL_DIR" ] || continue
 
     # Get local file→md5 map (sorted, only regular files)
-    LOCAL_HASHES=$(find "$LOCAL_DIR" -type f -not -name "*.log" -not -name "*.cache" -not -name ".DS_Store" -not -name "*.pyc" -not -path "*/__pycache__/*" 2>/dev/null \
+    LOCAL_HASHES=$(find -L "$LOCAL_DIR" -type f -not -name "*.log" -not -name "*.cache" -not -name ".DS_Store" -not -name "*.pyc" -not -path "*/__pycache__/*" 2>/dev/null \
         | sort | while read -r f; do
             REL=${f#$LOCAL_DIR/}
             HASH=$(md5 -q "$f" 2>/dev/null)

@@ -109,7 +109,7 @@ if [ -d "$SHARED/skills" ]; then
             fi
         fi
     done
-    echo "  skills: $(ls "$SHARED/skills" | wc -l | xargs
+    echo "  skills: $(ls "$SHARED/skills" | wc -l | xargs) linked"
 fi
 
 # Apply machine-specific settings.json
@@ -146,7 +146,7 @@ if [ "$MACHINE" = "mac-mini" ] && [ -d "$MACHINE_DIR/launchagents" ]; then
             fi
         fi
     done
-    echo "  launchagents: $(ls "$MACHINE_DIR/launchagents" | wc -l | xargs
+    echo "  launchagents: $(ls "$MACHINE_DIR/launchagents" | wc -l | xargs) managed"
 fi
 
 # Mac Mini only: apply crontab

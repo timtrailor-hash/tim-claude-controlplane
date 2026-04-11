@@ -1,0 +1,2 @@
+    echo "  skills: $(ls "$SHARED/skills" |  xargs$| xargs
+    echo "  launchagents: $(ls "$MACHINE_DIR/launchagents" |  xargs$| xargs
