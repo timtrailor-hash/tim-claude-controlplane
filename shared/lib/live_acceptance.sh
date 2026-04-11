@@ -26,7 +26,11 @@
 set -uo pipefail
 
 DEPLOY_START="${1:-$(date +%s)}"
-MODE="${LIVE_ACCEPTANCE_MODE:-advisory}"
+# Mode default: STRICT as of 2026-04-11. required_on_deploy=true items
+# must be fresh and user-visible outputs (health_check_results,
+# conversation_server_health) must pass. Optional items (printer_status)
+# still only WARN. Set LIVE_ACCEPTANCE_MODE=advisory during recovery.
+MODE="${LIVE_ACCEPTANCE_MODE:-strict}"
 LOG="/tmp/live_acceptance.log"
 TS=$(date "+%Y-%m-%d %H:%M:%S")
 

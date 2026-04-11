@@ -182,12 +182,39 @@ else
     fi
 fi
 
+# Post-deploy system inventory reconciliation — ChatGPT's highest-leverage
+# miss from the midway review. Scans live Mac Mini state, diffs against
+# system_map.yaml, fails the deploy if any declared service is MISSING or
+# any live service is UNDECLARED. On laptop, the inventory script no-ops.
+if [ -f "$REPO_DIR/shared/lib/system_inventory.sh" ] && [ "$DRY_RUN" = "0" ] && [ "$MACHINE" = "mac-mini" ]; then
+    echo
+    echo "--- Post-deploy inventory reconciliation ---"
+    if ! bash "$REPO_DIR/shared/lib/system_inventory.sh" 2>&1 | tail -30; then
+        echo
+        echo "WARN: deploy applied but inventory reconciliation found drift."
+        echo "  Investigate declared-vs-live differences above."
+        # Note: system_inventory exits non-zero on ANY discrepancy including
+        # listeners not in a declared list. That's too noisy for a strict
+        # gate right now, so we log + continue. Escalate to exit 3 after
+        # the undeclared-listener class is cleaned up.
+    fi
+fi
+
 # Post-deploy live-acceptance gate (Pattern 20 fix).
-# Only runs on mac-mini (where user-visible monitors live). Advisory mode
-# unless LIVE_ACCEPTANCE_MODE=strict is exported. Runs even on no-change
-# deploys so Tim can force a refresh by running deploy.sh with no diff.
+# Only runs on mac-mini (where user-visible monitors live). Strict mode
+# by default — any required_on_deploy=true check failing will propagate
+# a non-zero exit code from deploy.sh. The deploy has already been
+# applied at this point (symlinks, plists in place); the gate is
+# verification, not rollback. Non-zero exit tells the operator to
+# investigate, not that the changes were reverted.
 if [ -f "$REPO_DIR/shared/lib/live_acceptance.sh" ] && [ "$DRY_RUN" = "0" ]; then
     echo
     echo "--- Post-deploy live-acceptance gate ---"
-    bash "$REPO_DIR/shared/lib/live_acceptance.sh" "$DEPLOY_START_TS" || true
+    if ! bash "$REPO_DIR/shared/lib/live_acceptance.sh" "$DEPLOY_START_TS"; then
+        echo
+        echo "WARN: deploy applied but live-acceptance gate failed."
+        echo "  Investigate /tmp/live_acceptance.log for details."
+        echo "  Changes are still in place; this is a verification failure."
+        exit 3
+    fi
 fi

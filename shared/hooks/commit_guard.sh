@@ -17,7 +17,12 @@
 # Reads JSON from stdin per Claude Code hook protocol.
 
 INPUT=$(cat)
-MODE="${COMMIT_GUARD_MODE:-advisory}"
+# Mode default: STRICT as of 2026-04-11. commit-time metadata gates are
+# low-blast-radius and deterministic — no reason to leave soft after
+# shakedown. The three enforced policies are cheap to satisfy and the
+# error messages are actionable. Set COMMIT_GUARD_MODE=advisory to
+# temporarily downgrade during recovery.
+MODE="${COMMIT_GUARD_MODE:-strict}"
 
 COMMAND=$(echo "$INPUT" | python3 -c "
 import sys, json
