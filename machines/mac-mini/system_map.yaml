@@ -101,7 +101,7 @@ services:
     failure_impact: "OAuth expires, GWS MCP tools stop working"
     probe:
       type: file_age
-      path: ~/code/google_token.json
+      path: /Users/timtrailor/code/claude-mobile/google_token.json
       max_age_hours: 2
 
   governorhub-sync:
@@ -138,15 +138,15 @@ services:
   ttyd-tunnel:
     label: com.timtrailor.ttyd-tunnel
     purpose: "Cloudflare tunnel for browser terminal access (external)"
-    owner: cloudflared
+    owner: ttyd_tunnel.sh
     mode: KeepAlive
-    binary: /opt/homebrew/bin/cloudflared
+    code: ~/code/ttyd_tunnel.sh
     secrets: [Cloudflare tunnel token]
     failure_mode: YELLOW
     failure_impact: "browser terminal not reachable externally"
     probe:
       type: process
-      name: cloudflared
+      name: ttyd_tunnel.sh
     notes: "Evaluate: still needed with Tailscale — as of 2026-04-11 still running"
 
   streamlit-https:
@@ -202,9 +202,10 @@ services:
     failure_mode: LOW
     failure_impact: "ticket alert delayed"
     probe:
-      type: process
-      name: bgt_date_monitor
-    notes: "Evaluate: 10-min polling necessary? Consider webhook or hourly."
+      type: file_age
+      path: /Users/timtrailor/code/.bgt_known_dates.json
+      max_age_hours: 1
+    notes: "StartInterval — not continuously running; probe the output state file instead. Evaluate: 10-min polling necessary?"
 
 # ---------------------------------------------------------------------------
 # CRON JOBS — scheduled tasks not run as LaunchAgents.
