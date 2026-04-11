@@ -1,0 +1,65 @@
+# hosts/mac-mini.yaml — host-role policy for Tims-Mac-mini.local
+#
+# Audit 2026-04-11 §4.6: documentation said "laptop is thin client, Mac Mini is
+# the authoritative host", but the live estate diverged. This manifest puts
+# host-role policy in code — verify.sh reads it and fails on drift.
+#
+# Source of truth for service definitions: machines/mac-mini/system_map.yaml.
+# This file declares the POLICY (allowed / forbidden / required) rather than
+# the full service schema.
+
+schema_version: 1
+hostname_match: "Tims-Mac-mini.local"
+role: "authoritative server — runs all persistent daemons"
+
+# LaunchAgent labels that MAY exist on this host. Anything else = drift.
+# Mirrors machines/mac-mini/launchagents/ + any active com.timtrailor.* agents.
+allowed_launchagents:
+  - com.timtrailor.backup-to-drive
+  - com.timtrailor.bgt-date-monitor
+  - com.timtrailor.conversation-server
+  - com.timtrailor.governorhub-sync
+  - com.timtrailor.governors
+  - com.timtrailor.health-check
+  - com.timtrailor.printer-snapshots
+  - com.timtrailor.streamlit-https
+  - com.timtrailor.system-monitor        # legacy; scheduled for retirement
+  - com.timtrailor.token-refresh
+  - com.timtrailor.ttyd                  # disabled/quarantined post-audit 2026-04-11
+  - com.timtrailor.ttyd-tunnel
+  - com.timtrailor.unlock-keychain       # obsolete post keychain migration; scheduled for retirement
+
+# Symlinks that MUST exist and point at the correct target.
+required_symlinks:
+  /Users/timtrailor/.claude/projects/-Users-timtrailor-Documents-Claude-code/memory:
+    target: /Users/timtrailor/.claude/projects/-Users-timtrailor-code/memory
+    purpose: "Single canonical memory tree — drift-proof alias"
+
+# Files that MUST exist at a specific path on this host.
+required_files:
+  - /Users/timtrailor/code/claude-mobile/conversation_server.py
+  - /Users/timtrailor/code/credentials.py
+  - /Users/timtrailor/code/shared_utils.py
+  - /Users/timtrailor/code/tim-claude-controlplane/verify.sh
+  - /Users/timtrailor/.local/bin/conversation_daemon.sh
+  - /Users/timtrailor/code/claude-mobile/scripts/pre-push.sh
+
+# Files that MUST NOT exist (deleted / quarantined per audit).
+forbidden_files:
+  - /Users/timtrailor/.keychain_pass
+  - /Users/timtrailor/code/claude-mobile/conversation_server.py.bak
+
+# Git repos that MUST exist.
+required_repos:
+  - path: /Users/timtrailor/code/tim-claude-controlplane
+    purpose: "Control plane — deploy/verify/rollback"
+  - path: /Users/timtrailor/code/claude-mobile
+    purpose: "Mobile conversation server (canonical)"
+  - path: /Users/timtrailor/.claude/projects/-Users-timtrailor-code/memory
+    purpose: "Canonical memory tree (git remote: tim-memory.git)"
+
+# Paths that must be writable by user (spot-check for permission drift).
+writable_paths:
+  - /Users/timtrailor/code
+  - /Users/timtrailor/.claude
+  - /tmp

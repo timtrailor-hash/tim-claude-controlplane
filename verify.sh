@@ -246,6 +246,20 @@ PYEOF
     fi
 fi
 
+# 6c. Host-role manifest drift (audit 2026-04-11 §4.6).
+HOST_MANIFEST_SCRIPT="$REPO_DIR/shared/hooks/verify_host_manifest.sh"
+if [ -x "$HOST_MANIFEST_SCRIPT" ]; then
+    HOST_OUT=$("$HOST_MANIFEST_SCRIPT" 2>&1)
+    HOST_RC=$?
+    if [ "$HOST_RC" = "0" ]; then
+        check "host manifest drift (current host)" "0"
+    else
+        while IFS= read -r line; do
+            [ -n "$line" ] && check "host manifest: $line" "1"
+        done <<< "$HOST_OUT"
+    fi
+fi
+
 # 7. Run pytest scenarios (unless --quick)
 if [ "$QUICK" = "0" ] && [ -d "$REPO_DIR/scenarios" ]; then
     if /opt/homebrew/bin/python3.11 -m pytest --version 2>/dev/null >/dev/null 2>&1; then

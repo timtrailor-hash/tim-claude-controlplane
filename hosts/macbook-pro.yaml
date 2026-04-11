@@ -1,0 +1,46 @@
+# hosts/macbook-pro.yaml — host-role policy for Tims-MacBook-Pro-2.local
+#
+# Audit 2026-04-11 §4.6 / §3.1: the MacBook Pro is a THIN CLIENT. Its only
+# job is to SSH into the Mac Mini. It must not run persistent daemons and
+# must not carry duplicate code copies that can drift from the Mac Mini.
+#
+# Policy violations caught by verify.sh and the nightly
+# scenarios/hosts/verify_laptop_agents.sh check (via Mac Mini cron).
+
+schema_version: 1
+hostname_match: "Tims-MacBook-Pro*"
+role: "thin client — SSH into Mac Mini for real work"
+
+# Only ONE LaunchAgent permitted. Everything else = drift.
+allowed_launchagents:
+  - com.timtrailor.health-check          # lightweight local heartbeat (see audit §3.1 for leave-alone rationale)
+
+# The memory tree must be a symlink to the canonical git clone on this host.
+required_symlinks:
+  /Users/timtrailor/.claude/projects/-Users-timtrailor-Documents-Claude-code/memory:
+    target: /Users/timtrailor/.claude/projects/-Users-timtrailor-code/memory
+    purpose: "Match Mac Mini layout so MEMORY.md references resolve identically"
+
+# Files that MUST exist.
+required_files:
+  - /Users/timtrailor/.claude/hooks/validate_hooks.sh
+  - /Users/timtrailor/code/claude-mobile/scripts/pre-push.sh
+  - /Users/timtrailor/code/tim-claude-controlplane/shared/hooks/memory_index_diff.sh
+
+# Files / dirs that MUST NOT exist (thin-client enforcement).
+forbidden_files:
+  - /Users/timtrailor/.keychain_pass
+  - /Users/timtrailor/code/claude-mobile/conversation_server.py      # quarantined 2026-04-11
+  - /Users/timtrailor/Documents/Claude code/conversation_server.py    # quarantined 2026-04-11
+
+# Git repos permitted to exist locally. No daemons run here, but read-only
+# clones are useful for diffing, testing, and offline editing.
+required_repos:
+  - path: /Users/timtrailor/.claude/projects/-Users-timtrailor-code/memory
+    purpose: "Canonical memory clone (read-mostly; push blocked by pre-push hook)"
+
+# Paths that must be writable.
+writable_paths:
+  - /Users/timtrailor/code
+  - /Users/timtrailor/.claude
+  - /tmp
