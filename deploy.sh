@@ -21,6 +21,7 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 SHARED="$REPO_DIR/shared"
 DRY_RUN=0
 FORCE=0
+DEPLOY_START_TS=$(date +%s)
 for arg in "$@"; do
     case "$arg" in
         --dry-run) DRY_RUN=1 ;;
@@ -179,4 +180,14 @@ else
     if [ -f "$REPO_DIR/verify.sh" ]; then
         bash "$REPO_DIR/verify.sh" --quick
     fi
+fi
+
+# Post-deploy live-acceptance gate (Pattern 20 fix).
+# Only runs on mac-mini (where user-visible monitors live). Advisory mode
+# unless LIVE_ACCEPTANCE_MODE=strict is exported. Runs even on no-change
+# deploys so Tim can force a refresh by running deploy.sh with no diff.
+if [ -f "$REPO_DIR/shared/lib/live_acceptance.sh" ] && [ "$DRY_RUN" = "0" ]; then
+    echo
+    echo "--- Post-deploy live-acceptance gate ---"
+    bash "$REPO_DIR/shared/lib/live_acceptance.sh" "$DEPLOY_START_TS" || true
 fi
