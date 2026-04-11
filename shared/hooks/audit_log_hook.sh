@@ -8,7 +8,7 @@ COMMAND=$(echo "$INPUT" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
-    print(data.get('command', data.get('stdout', '')))
+    print(data.get('tool_input', {}).get('command', data.get('tool_input', {}).get('stdout', '')))
 except:
     print('')
 " 2>/dev/null)
@@ -17,7 +17,7 @@ EXIT_CODE=$(echo "$INPUT" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
-    print(data.get('exit_code', data.get('exitCode', '?')))
+    print(data.get('tool_result', {}).get('exit_code', data.get('tool_result', {}).get('exitCode', '?')))
 except:
     print('?')
 " 2>/dev/null)

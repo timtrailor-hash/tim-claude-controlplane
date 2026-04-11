@@ -10,7 +10,7 @@ FILE_PATH=$(echo "$INPUT" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
-    print(data.get('file_path', ''))
+    print(data.get('tool_input', {}).get('file_path', ''))
 except:
     print('')
 " 2>/dev/null)
@@ -40,7 +40,7 @@ CONTENT=$(echo "$INPUT" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
-    content = data.get('content', '') or data.get('new_string', '')
+    content = data.get('tool_input', {}).get('content', '') or data.get('new_string', '')
     print(content[:5000])  # Check first 5K chars only
 except:
     print('')
