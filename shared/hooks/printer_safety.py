@@ -4,7 +4,12 @@
 Reads printer IPs and safety rules from ~/.claude/printer_config.toml.
 FAIL-CLOSED: If a command targets a printer but we can't parse it, we BLOCK."""
 
-import json, sys, re, urllib.parse, subprocess, os
+import json
+import sys
+import re
+import urllib.parse
+import subprocess
+import os
 from datetime import datetime, timezone
 
 CONFIG_PATH = os.path.expanduser("~/.claude/printer_config.toml")

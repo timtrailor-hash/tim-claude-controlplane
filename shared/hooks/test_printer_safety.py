@@ -6,7 +6,10 @@ Or:  pytest ~/.claude/hooks/test_printer_safety.py -v
 
 Tests the hook by feeding it mock stdin and checking exit codes + stderr output."""
 
-import subprocess, json, sys, os, tempfile
+import subprocess
+import json
+import sys
+import os
 
 HOOK = os.path.expanduser("~/.claude/hooks/printer_safety.py")
 PYTHON = sys.executable

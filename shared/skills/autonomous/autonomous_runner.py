@@ -22,7 +22,6 @@ import json
 import os
 import smtplib
 import subprocess
-import sys
 import time
 import traceback
 import urllib.request
@@ -329,7 +328,7 @@ def notify(to_email, subject, body_text, body_html=None):
 
     # 4. File fallback (always write as safety net)
     Path("/tmp/autonomous_result.txt").write_text(body_text)
-    log(f"Result also saved to /tmp/autonomous_result.txt")
+    log("Result also saved to /tmp/autonomous_result.txt")
 
     log(f"Notification cascade result: {', '.join(channels_tried)} | any_sent={any_sent}")
     return any_sent
