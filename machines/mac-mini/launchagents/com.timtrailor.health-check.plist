@@ -2,25 +2,20 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key>
-    <string>com.timtrailor.health-check</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/opt/homebrew/bin/python3.11</string>
-        <string>/Users/timtrailor/code/health_check.py</string>
-    </array>
-    <key>StandardErrorPath</key>
-    <string>/tmp/health_check.log</string>
-    <key>StandardOutPath</key>
-    <string>/tmp/health_check.log</string>
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>4</integer>
-        <key>Minute</key>
-        <integer>0</integer>
-    </dict>
-    <key>WorkingDirectory</key>
-    <string>/Users/timtrailor/code</string>
+	<key>Label</key>
+	<string>com.timtrailor.health-check</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/python3.11</string>
+		<string>/Users/timtrailor/code/health_check.py</string>
+	</array>
+	<key>StandardErrorPath</key>
+	<string>/tmp/health_check.log</string>
+	<key>StandardOutPath</key>
+	<string>/tmp/health_check.log</string>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>WorkingDirectory</key>
+	<string>/Users/timtrailor/code</string>
 </dict>
 </plist>
