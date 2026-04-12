@@ -77,6 +77,45 @@ def log(msg):
         f.write(line + "\n")
 
 
+# ── Live Activity reporting ───────────────────────────────────────────────
+# The runner fires lifecycle events at `http://localhost:8081/internal/autonomous-event`
+# so the conversation server can drive a Live Activity on the user's iPhone.
+# Fire-and-forget, short timeout, never blocks the task.
+
+_LA_TASK_ID = None  # set once at task start
+_LA_ENDPOINT = "http://localhost:8081/internal/autonomous-event"
+
+
+def _la_task_id():
+    global _LA_TASK_ID
+    if _LA_TASK_ID is None:
+        _LA_TASK_ID = os.urandom(4).hex()
+    return _LA_TASK_ID
+
+
+def post_la_event(event, **fields):
+    """POST an autonomous-task lifecycle event to the conversation server.
+    Always returns cleanly; never raises — LA visibility is best-effort."""
+    try:
+        payload = {"event": event, "task_id": _la_task_id(), "pid": os.getpid()}
+        payload.update(fields)
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            _LA_ENDPOINT,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=2).read()
+    except Exception as exc:
+        # Log but never let a broken LA stop the autonomous task from running.
+        try:
+            log(f"LA event {event} failed (non-fatal): {exc}")
+        except Exception:
+            pass
+
+
+
 # ── Claude execution ──────────────────────────────────────────────────────────
 
 def run_claude(prompt, timeout_seconds=600):
@@ -359,6 +398,8 @@ def run_autonomous_task(prompt, to_email, max_retries=5, timeout=600):
             "pid": os.getpid(),
         })
     )
+    post_la_event("task_started", prompt=prompt[:2000],
+                  max_retries=max_retries)
 
     attempts = []
     success = False
@@ -366,6 +407,7 @@ def run_autonomous_task(prompt, to_email, max_retries=5, timeout=600):
 
     for attempt in range(1, max_retries + 1):
         log(f"\n--- Attempt {attempt}/{max_retries} ---")
+        post_la_event("attempt_started", attempt=attempt, max_retries=max_retries)
 
         ok, output, duration = run_claude(prompt, timeout_seconds=timeout)
         attempts.append({
@@ -384,6 +426,8 @@ def run_autonomous_task(prompt, to_email, max_retries=5, timeout=600):
             break
         else:
             log(f"Attempt {attempt} failed. Output: {output[:200]}")
+            post_la_event("attempt_failed", attempt=attempt,
+                          max_retries=max_retries, preview=output[:200])
             if attempt < max_retries:
                 backoff = min(30 * (2 ** (attempt - 1)), 300)  # 30s, 60s, 120s, 240s, 300s
                 log(f"Retrying in {backoff}s...")
@@ -428,6 +472,13 @@ Full log: {LOG_FILE}
 """
 
     # ── Send notification (cascade: email → ntfy → slack → file) ───────────
+
+    if success:
+        post_la_event("task_completed", attempts=len(attempts),
+                      max_retries=max_retries, body=final_output[:500])
+    else:
+        post_la_event("task_failed", attempts=len(attempts),
+                      max_retries=max_retries, body=body_text[:500])
 
     notified = notify(to_email, subject, body_text)
 

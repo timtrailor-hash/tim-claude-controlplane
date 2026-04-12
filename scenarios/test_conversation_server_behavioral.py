@@ -54,11 +54,18 @@ def client_with_auth():
 
     original_token = getattr(conversation_server, "AUTH_TOKEN", None)
     conversation_server.AUTH_TOKEN = "test-secret-token-12345"
+    # Also patch conv.app.AUTH_TOKEN — check_auth reads from there after the
+    # conv/ package split (2026-04-12). The import creates a binding, not a
+    # reference, so both must be set.
+    import conv.app
+    original_conv_token = conv.app.AUTH_TOKEN
+    conv.app.AUTH_TOKEN = "test-secret-token-12345"
 
     with conversation_server.app.test_client() as c:
         yield c
 
     conversation_server.AUTH_TOKEN = original_token
+    conv.app.AUTH_TOKEN = original_conv_token
 
 
 class TestHealthEndpoint:
