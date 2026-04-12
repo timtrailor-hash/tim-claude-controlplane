@@ -10,7 +10,7 @@
         <string>--port</string>
         <string>7681</string>
         <string>--interface</string>
-        <string>tailscale0</string>
+        <string>utun0</string>
         <string>--credential</string>
         <string>tim:[REDACTED-LEGACY]</string>
         <string>/bin/zsh</string>
