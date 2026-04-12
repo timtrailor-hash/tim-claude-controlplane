@@ -246,6 +246,142 @@ PYEOF
     fi
 fi
 
+# 6d. Schedule drift: system_map.yaml `mode` vs plist schedule keys.
+#
+# Pattern 17 redux (2026-04-12 health-check incident): the manifest declared
+# `mode: StartInterval 3600` while the plist used StartCalendarInterval
+# Hour=4, Minute=0. Nothing mechanically checked the two agreed, so the
+# health-check probe silently ran once a day for months and the iOS app
+# showed probe:health-check red.
+#
+# This check canonicalises both sides to a comparable tuple and fails on
+# any mismatch. Covers KeepAlive, RunAtLoad, StartInterval, and
+# StartCalendarInterval (daily + weekly) — the four forms actually used in
+# mac-mini/system_map.yaml. plist parsing uses `plutil -convert json`, not
+# XML regex.
+if command -v /opt/homebrew/bin/python3.11 >/dev/null 2>&1; then
+    SCHED_RESULT=$(SYSTEM_MAP_MACHINE=mac-mini /opt/homebrew/bin/python3.11 - "$REPO_DIR" <<'PYEOF' 2>&1
+import json, re, subprocess, sys
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+sys.path.insert(0, str(repo / "shared" / "lib"))
+import system_map
+
+WEEKDAYS = {
+    "sunday": 0, "sun": 0,
+    "monday": 1, "mon": 1,
+    "tuesday": 2, "tue": 2,
+    "wednesday": 3, "wed": 3,
+    "thursday": 4, "thu": 4,
+    "friday": 5, "fri": 5,
+    "saturday": 6, "sat": 6,
+}
+
+def parse_manifest_mode(mode):
+    """Canonicalise a system_map.yaml `mode:` string.
+
+    Returns (kind, detail) where detail is hashable/comparable, or raises
+    ValueError on an unrecognised shape. The shapes are intentionally the
+    ones that actually appear in mac-mini/system_map.yaml — unknown forms
+    surface as drift so this check never silently passes a new shape.
+    """
+    if not mode or not isinstance(mode, str):
+        raise ValueError(f"empty or non-string mode: {mode!r}")
+    s = mode.strip()
+    if s == "KeepAlive":
+        return ("KeepAlive", None)
+    if s == "RunAtLoad":
+        return ("RunAtLoad", None)
+    m = re.fullmatch(r"StartInterval\s+(\d+)", s)
+    if m:
+        return ("StartInterval", int(m.group(1)))
+    # StartCalendarInterval forms:
+    #   StartCalendarInterval HH:MM                (daily)
+    #   StartCalendarInterval <Weekday> HH:MM      (weekly)
+    m = re.fullmatch(r"StartCalendarInterval\s+(\d{1,2}):(\d{2})", s)
+    if m:
+        return ("StartCalendarInterval",
+                (("Hour", int(m.group(1))), ("Minute", int(m.group(2)))))
+    m = re.fullmatch(r"StartCalendarInterval\s+(\w+)\s+(\d{1,2}):(\d{2})", s)
+    if m:
+        wd = WEEKDAYS.get(m.group(1).lower())
+        if wd is None:
+            raise ValueError(f"unknown weekday in mode: {s!r}")
+        return ("StartCalendarInterval",
+                (("Hour", int(m.group(2))), ("Minute", int(m.group(3))),
+                 ("Weekday", wd)))
+    raise ValueError(f"unrecognised mode shape: {s!r}")
+
+def parse_plist_schedule(plist_path):
+    """Canonicalise a plist's schedule keys to the same tuple shape."""
+    out = subprocess.check_output(
+        ["plutil", "-convert", "json", "-o", "-", str(plist_path)],
+        text=True)
+    d = json.loads(out)
+    if d.get("KeepAlive"):
+        return ("KeepAlive", None)
+    if "StartInterval" in d:
+        return ("StartInterval", int(d["StartInterval"]))
+    sci = d.get("StartCalendarInterval")
+    if isinstance(sci, dict):
+        # Only carry keys we know how to compare; Weekday is optional.
+        parts = [("Hour", int(sci.get("Hour", 0))),
+                 ("Minute", int(sci.get("Minute", 0)))]
+        if "Weekday" in sci:
+            parts.append(("Weekday", int(sci["Weekday"])))
+        return ("StartCalendarInterval", tuple(parts))
+    # Nothing schedule-ish beyond RunAtLoad → treat as RunAtLoad one-shot.
+    if d.get("RunAtLoad"):
+        return ("RunAtLoad", None)
+    return ("Unknown", None)
+
+plist_dir = repo / "machines" / "mac-mini" / "launchagents"
+issues = []
+checked = 0
+for name, entry in (system_map.services() or {}).items():
+    if not isinstance(entry, dict):
+        continue
+    mode = entry.get("mode")
+    label = entry.get("label") or f"com.timtrailor.{name}"
+    plist_path = plist_dir / f"{label}.plist"
+    if not plist_path.exists():
+        # Alignment check 6b already flags missing plists — don't
+        # double-report here.
+        continue
+    try:
+        manifest_canon = parse_manifest_mode(mode)
+    except ValueError as e:
+        issues.append(f"{name}: manifest mode parse failed: {e}")
+        continue
+    try:
+        plist_canon = parse_plist_schedule(plist_path)
+    except Exception as e:
+        issues.append(f"{name}: plist parse failed: {e}")
+        continue
+    checked += 1
+    if manifest_canon != plist_canon:
+        issues.append(
+            f"DRIFT {name}: manifest mode={mode!r} "
+            f"(canon={manifest_canon}) vs plist={plist_canon}"
+        )
+
+if checked == 0 and not issues:
+    issues.append("no services checked — system_map.services() empty?")
+
+for i in issues:
+    print(i)
+PYEOF
+)
+    if [ -z "$SCHED_RESULT" ]; then
+        check "system_map.yaml mode ↔ plist schedule aligned" "0"
+    else
+        while IFS= read -r line; do
+            [ -n "$line" ] && check "schedule drift: $line" "1"
+        done <<< "$SCHED_RESULT"
+    fi
+fi
+
 # 6c. Host-role manifest drift (audit 2026-04-11 §4.6).
 HOST_MANIFEST_SCRIPT="$REPO_DIR/shared/hooks/verify_host_manifest.sh"
 if [ -x "$HOST_MANIFEST_SCRIPT" ]; then
