@@ -84,12 +84,11 @@ else
     check "printer-safety-check wired in settings.json" "1"
 fi
 
-# 3. keychain_pass must NOT exist (audit 2026-04-11 §3.5 — keychain migration).
-if [ -f "$HOME/.keychain_pass" ]; then
-    check "~/.keychain_pass resurfaced — should be deleted post-2026-04-11 migration" "1"
-else
-    check "~/.keychain_pass absent (keychain migration intact)" "0"
-fi
+# 3. keychain_pass presence policy — delegated to hosts/<host>.yaml forbidden_files.
+#    Removed the hardcoded check on 2026-04-18: services.yaml documents
+#    ~/.keychain_pass as the intentional accepted-risk root-of-trust bypass
+#    for unlock-keychain.sh. If policy changes, re-add to forbidden_files.
+
 
 # 4. Check critical binaries
 for bin in /opt/homebrew/bin/python3.11 /opt/homebrew/bin/ruff /opt/homebrew/bin/semgrep /opt/homebrew/bin/swiftlint; do
