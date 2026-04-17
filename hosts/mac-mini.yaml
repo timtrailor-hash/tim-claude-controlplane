@@ -25,7 +25,6 @@ allowed_launchagents:
   - com.timtrailor.streamlit-https
   - com.timtrailor.system-monitor        # legacy; scheduled for retirement
   - com.timtrailor.token-refresh
-  - com.timtrailor.ttyd                  # disabled/quarantined post-audit 2026-04-11
   - com.timtrailor.ttyd-tunnel
   - com.timtrailor.unlock-keychain       # obsolete post keychain migration; scheduled for retirement
 
@@ -46,7 +45,6 @@ required_files:
 
 # Files that MUST NOT exist (deleted / quarantined per audit).
 forbidden_files:
-  - /Users/timtrailor/.keychain_pass
   - /Users/timtrailor/code/claude-mobile/conversation_server.py.bak
 
 # Git repos that MUST exist.

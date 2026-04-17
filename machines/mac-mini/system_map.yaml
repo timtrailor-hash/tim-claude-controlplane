@@ -118,36 +118,24 @@ services:
       path: ~/code/governorhub_sync.log
       max_age_hours: 192
 
-  ttyd:
-    label: com.timtrailor.ttyd
-    purpose: "Browser-based terminal access"
-    owner: ttyd
+  ttyd-tunnel:
+    label: com.timtrailor.ttyd-tunnel
+    purpose: "Browser-based terminal via Tailscale (ttyd on port 7681)"
+    owner: ttyd_tunnel.sh
     mode: KeepAlive
+    code: ~/code/ttyd_tunnel.sh
     binary: /opt/homebrew/bin/ttyd
     port: 7681
-    secrets: []
+    secrets: [ttyd-auth keychain entry]
     failure_mode: YELLOW
     failure_impact: "browser terminal unavailable"
     probe:
       type: http
-      url: http://127.0.0.1:7681/
+      url: http://100.126.253.40:7681/
       expect_status: 401
       timeout_s: 5
       notes: "401 is healthy — ttyd requires basic auth; a 401 proves the server is alive and auth is configured"
-
-  ttyd-tunnel:
-    label: com.timtrailor.ttyd-tunnel
-    purpose: "Cloudflare tunnel for browser terminal access (external)"
-    owner: ttyd_tunnel.sh
-    mode: KeepAlive
-    code: ~/code/ttyd_tunnel.sh
-    secrets: [Cloudflare tunnel token]
-    failure_mode: YELLOW
-    failure_impact: "browser terminal not reachable externally"
-    probe:
-      type: process
-      name: ttyd_tunnel.sh
-    notes: "Evaluate: still needed with Tailscale — as of 2026-04-11 still running"
+    notes: "Consolidated 2026-04-12: removed standalone com.timtrailor.ttyd + ngrok tunnel (Pattern 22). Binds to Tailscale IP only, creds from Keychain."
 
   streamlit-https:
     label: com.timtrailor.streamlit-https

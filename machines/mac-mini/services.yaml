@@ -65,16 +65,6 @@ services:
     failure_mode: "YELLOW — stale context, alert after 8 days"
     auto_fix: false
 
-  ttyd:
-    purpose: "Browser-based terminal access"
-    owner: ttyd
-    mode: KeepAlive
-    binary: /opt/homebrew/bin/ttyd
-    port: 7681
-    secrets: []
-    failure_mode: "YELLOW — browser terminal unavailable"
-    auto_fix: false
-
   unlock-keychain:
     purpose: "Unlock login keychain at boot for headless secret access"
     owner: security CLI
@@ -106,14 +96,16 @@ services:
     notes: "Evaluate: Streamlit native HTTPS or Caddy — 2026-04-11 still running"
 
   ttyd-tunnel:
-    purpose: "Cloudflare tunnel for browser terminal access"
-    owner: cloudflared
+    purpose: "Browser-based terminal via Tailscale (direct ttyd on 7681, no public tunnel)"
+    owner: ttyd_tunnel.sh
     mode: KeepAlive
-    binary: /opt/homebrew/bin/cloudflared
-    secrets: [Cloudflare tunnel token]
-    failure_mode: "YELLOW — browser terminal not reachable externally"
+    code: ~/code/ttyd_tunnel.sh
+    binary: /opt/homebrew/bin/ttyd
+    port: 7681
+    secrets: [ttyd-auth keychain entry]
+    failure_mode: "YELLOW — browser terminal unavailable"
     auto_fix: false
-    notes: "Evaluate: still needed now that Tailscale provides direct access — 2026-04-11 still running"
+    notes: "Consolidated 2026-04-12: removed standalone com.timtrailor.ttyd + ngrok/cloudflared. Binds to Tailscale IP, creds from Keychain. Pattern 22 enforcement."
 
   bgt-date-monitor:
     purpose: "BGT ticket date monitoring"
