@@ -180,6 +180,22 @@ services:
       max_age_hours: 2
     notes: "Output /tmp/health_check_results.json is the iOS Claude Control app's data source"
 
+
+  acceptance-tests:
+    label: com.timtrailor.acceptance-tests
+    purpose: "Empirical compliance tests — every 2h"
+    owner: acceptance_tests.py
+    mode: StartInterval 7200
+    code: ~/code/acceptance_tests.py
+    secrets: []
+    failure_mode: YELLOW
+    failure_impact: "compliance score stale; no runtime impact"
+    probe:
+      type: file_age
+      path: /tmp/acceptance_results.json
+      max_age_hours: 3
+    notes: "Shipped 2026-04-18 as the deterministic counter to probabilistic LLM reviews."
+
   bgt-date-monitor:
     label: com.timtrailor.bgt-date-monitor
     purpose: "BGT ticket date monitoring"

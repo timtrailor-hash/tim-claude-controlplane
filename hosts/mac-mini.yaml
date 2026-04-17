@@ -15,6 +15,7 @@ role: "authoritative server — runs all persistent daemons"
 # LaunchAgent labels that MAY exist on this host. Anything else = drift.
 # Mirrors machines/mac-mini/launchagents/ + any active com.timtrailor.* agents.
 allowed_launchagents:
+  - com.timtrailor.acceptance-tests
   - com.timtrailor.backup-to-drive
   - com.timtrailor.bgt-date-monitor
   - com.timtrailor.conversation-server

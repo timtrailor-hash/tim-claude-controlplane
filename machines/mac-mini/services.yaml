@@ -118,6 +118,17 @@ services:
     auto_fix: false
     notes: "Evaluate: 10-min polling necessary? Consider webhook or hourly."
 
+  acceptance-tests:
+    purpose: "Empirical compliance tests — deterministic user-story verification every 2h"
+    owner: acceptance_tests.py
+    mode: StartInterval 7200
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/acceptance_tests.py
+    secrets: []
+    failure_mode: "YELLOW — compliance score stale; still observable in /tmp/acceptance_results.json"
+    auto_fix: false
+    notes: "Writes /tmp/acceptance_results.json + appends ~/code/compliance_history.jsonl. Designed 2026-04-03, shipped 2026-04-18."
+
 cron_jobs:
   reboot_services:
     schedule: "@reboot"
