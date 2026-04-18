@@ -126,6 +126,22 @@ if [ -n "$REPO_DIR" ]; then
 - machines/<host>/system_map.yaml is in diff — commit message must include 'Reviewed-By:' trailer (authority map change-control)"
         fi
     fi
+
+    # Check 4: Baseline ratchet guard — .conv_server_baseline can ONLY decrease.
+    # Any commit that increases it must include a "Ratchet-override:" trailer
+    # explaining why (and will still be flagged for human review).
+    if cd "$REPO_DIR" && git diff --cached --name-only 2>/dev/null | grep -q "^\.conv_server_baseline$"; then
+        OLD_BASELINE=$(git -C "$REPO_DIR" show HEAD:.conv_server_baseline 2>/dev/null | tr -d '[:space:]')
+        NEW_BASELINE=$(git -C "$REPO_DIR" show :.conv_server_baseline 2>/dev/null | tr -d '[:space:]')
+        if [ -n "$OLD_BASELINE" ] && [ -n "$NEW_BASELINE" ]; then
+            if [ "$NEW_BASELINE" -gt "$OLD_BASELINE" ] 2>/dev/null; then
+                if ! echo "$MSG" | grep -qE '^Ratchet-override:'; then
+                    ISSUES="$ISSUES
+- .conv_server_baseline increased ($OLD_BASELINE -> $NEW_BASELINE): ratchet must only decrease. Add 'Ratchet-override: <reason>' trailer if this growth is intentional and justified."
+                fi
+            fi
+        fi
+    fi
 fi
 
 if [ -z "$ISSUES" ]; then

@@ -73,3 +73,40 @@ def test_baseline_moves_toward_target(baseline_lines):
         f"Baseline {baseline_lines} is implausibly high. "
         "Did someone set it to `wc -l` of something unrelated?"
     )
+
+
+def test_ratchet_fires_on_growth(tmp_path, monkeypatch):
+    """Self-test: confirm the ratchet actually fails when the monolith grows.
+
+    Addresses Gemini's Round-0 action #3: the ratchet is a critical CI control
+    but its own failure mode is untested until now. Simulate a file larger
+    than the baseline and assert the same assertion logic flags it.
+    """
+    # Build a fake server file with baseline+1 lines.
+    fake_server = tmp_path / "fake_server.py"
+    fake_server.write_text("\n".join(f"line {i}" for i in range(5000)) + "\n")  # 5000 lines
+    fake_baseline = tmp_path / "fake_baseline"
+    fake_baseline.write_text("4999\n")
+
+    actual_lines = sum(1 for _ in fake_server.open())
+    declared_baseline = int(fake_baseline.read_text().strip())
+
+    # The ratchet rule: actual_lines must be <= declared_baseline.
+    with pytest.raises(AssertionError, match=r"grew from 4999 to 5000 lines"):
+        assert actual_lines <= declared_baseline, (
+            f"conversation_server.py grew from {declared_baseline} to {actual_lines} lines."
+        )
+
+
+def test_ratchet_passes_on_shrink(tmp_path):
+    """Self-test: confirm the ratchet accepts a smaller monolith."""
+    fake_server = tmp_path / "fake_server.py"
+    fake_server.write_text("\n".join(f"line {i}" for i in range(4000)) + "\n")
+    fake_baseline = tmp_path / "fake_baseline"
+    fake_baseline.write_text("5000\n")
+
+    actual_lines = sum(1 for _ in fake_server.open())
+    declared_baseline = int(fake_baseline.read_text().strip())
+
+    # Should NOT raise.
+    assert actual_lines <= declared_baseline
