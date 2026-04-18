@@ -212,6 +212,22 @@ services:
       max_age_hours: 36
     notes: "Persistence infrastructure — makes slow decay visible via weekly digest."
 
+
+  credential-rotation:
+    label: com.timtrailor.credential-rotation
+    purpose: "Quarterly managed-secret rotation"
+    owner: credential_rotation.py
+    mode: StartCalendarInterval 04:30
+    code: ~/code/credential_rotation.py
+    secrets: [ttyd-auth keychain entry]
+    failure_mode: RED
+    failure_impact: "stale credential — increased remote-exploitation window"
+    probe:
+      type: file_age
+      path: /Users/timtrailor/code/.credential_rotation_state.json
+      max_age_hours: 48
+    notes: "Part of persistent-9/10 hardening (2026-04-18). See credential_rotation.py for managed-secret list."
+
   bgt-date-monitor:
     label: com.timtrailor.bgt-date-monitor
     purpose: "BGT ticket date monitoring"

@@ -140,6 +140,17 @@ services:
     auto_fix: false
     notes: "Reads compliance + monolith + lessons metrics, appends ~/code/trend_history.jsonl, emails digest on Mondays. Built 2026-04-18 for persistent 9/10 sustainment."
 
+  credential-rotation:
+    purpose: "Quarterly rotation of non-OAuth managed secrets (ttyd-auth, etc.)"
+    owner: credential_rotation.py
+    mode: StartCalendarInterval 04:30
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/credential_rotation.py
+    secrets: ["~/.keychain_pass (for unlock)", "login keychain entries"]
+    failure_mode: "RED — stale credential risk if rotation fails; alerts on failure"
+    auto_fix: false
+    notes: "Runs daily. Skips unless a managed secret exceeds max_age_d (ttyd-auth = 90). State in ~/code/.credential_rotation_state.json."
+
 cron_jobs:
   reboot_services:
     schedule: "@reboot"

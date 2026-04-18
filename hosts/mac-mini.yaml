@@ -18,6 +18,7 @@ allowed_launchagents:
   - com.timtrailor.acceptance-tests
   - com.timtrailor.backup-to-drive
   - com.timtrailor.bgt-date-monitor
+  - com.timtrailor.credential-rotation
   - com.timtrailor.conversation-server
   - com.timtrailor.governorhub-sync
   - com.timtrailor.governors

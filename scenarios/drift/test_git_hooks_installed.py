@@ -23,7 +23,7 @@ def test_hook_installer_exists():
 
 
 def test_hook_sources_exist():
-    for hook in ("pre-commit", "pre-push"):
+    for hook in ("pre-commit", "pre-push", "post-commit"):
         p = REPO / "shared" / "git-hooks" / hook
         assert p.exists(), f"missing {p}"
         assert p.stat().st_mode & 0o111, f"{p} not executable"

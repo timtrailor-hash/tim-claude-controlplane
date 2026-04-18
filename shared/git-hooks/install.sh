@@ -52,7 +52,7 @@ for repo in "${MANAGED_REPOS[@]}"; do
         gitdir="$repo/.git"
     fi
 
-    for hook in pre-commit pre-push; do
+    for hook in pre-commit pre-push post-commit; do
         dst="$gitdir/hooks/$hook"
         src="$SHARED_HOOKS_DIR/$hook"
         if [ ! -f "$src" ]; then
