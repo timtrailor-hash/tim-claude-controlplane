@@ -38,7 +38,7 @@ jobs:
           check shared/git-hooks/pre-push 100 "verify.sh"
           check shared/git-hooks/post-commit 100 "commit_audit"
           check shared/hooks/protected_path_hook.sh 200 "LaunchAgent"
-          check shared/hooks/credential_leak_hook.sh 200 "sk-ant"
+          check shared/hooks/credential_leak_hook.sh 200 "ANTHROPIC_API_KEY"
           check verify.sh 200 "passed, "
           check .conv_server_baseline 2 ""
           check scenarios/drift/test_monolith_ratchet.py 200 "test_ratchet_fires_on_growth"
