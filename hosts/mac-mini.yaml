@@ -26,6 +26,7 @@ allowed_launchagents:
   - com.timtrailor.streamlit-https
   - com.timtrailor.system-monitor        # legacy; scheduled for retirement
   - com.timtrailor.token-refresh
+  - com.timtrailor.trend-tracker
   - com.timtrailor.ttyd-tunnel
   - com.timtrailor.unlock-keychain       # obsolete post keychain migration; scheduled for retirement
 

@@ -44,6 +44,12 @@ Turn Tim's conversational request into a **complete, self-contained prompt** tha
 
 ### Step 2: Write and launch the runner
 
+**CRITICAL — keychain-capable launch only.** Subscription auth lives in the macOS login keychain (`security find-generic-password -s "Claude Code-credentials"`). That keychain is unlocked for the GUI user session and anything spawned from it (claude-mobile LaunchAgent → your current Claude session). It is NOT unlocked for fresh non-interactive SSH sessions — so wrapping the launch in `ssh user@host '...'` on the same Mac Mini will make `claude -p` fail with "Not logged in" on every retry even though login is fine. (2026-04-14 incident.)
+
+**Rule: launch the runner directly from your current session. Never wrap in an SSH call to the same host.** You are already on the Mac Mini (`hostname` = `Tims-Mac-mini.local`); there is nowhere to SSH to. The runner now pre-flight-checks keychain reachability and will hard-abort with exit code 2 before the retry loop if you violate this rule.
+
+Use the Bash tool with `run_in_background: true`:
+
 ```bash
 nohup python3 ~/.claude/skills/autonomous/autonomous_runner.py \
   --prompt "THE COMPLETE SELF-CONTAINED PROMPT HERE" \

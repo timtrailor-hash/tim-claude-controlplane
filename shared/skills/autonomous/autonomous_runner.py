@@ -116,6 +116,68 @@ def post_la_event(event, **fields):
 
 
 
+# ── Pre-flight: keychain + subscription auth must be reachable ──────────────
+# Root cause of 2026-04-14 failure: runner launched from a fresh SSH session.
+# macOS only unlocks the login keychain for GUI / LaunchAgent sessions, so
+# `security find-generic-password` returned empty, the Claude CLI found no
+# OAuth token, and every retry died with "Not logged in · Please run /login".
+# Fail fast here so future breakage produces a loud, specific error instead of
+# 5 silent retries that waste ~10 minutes before the cascade email.
+
+def preflight_auth_or_die():
+    """Verify the subscription OAuth token is reachable from this process.
+
+    Structural enforcement of: "launch the autonomous runner from a
+    keychain-capable session — never wrap it in `ssh user@host 'nohup ...'`
+    on the same host. Use run_in_background (or run directly) from inside
+    the current Claude Code session instead."
+    """
+    # 1. ANTHROPIC_API_KEY use is prohibited — subscription only.
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        log("PRE-FLIGHT WARN: ANTHROPIC_API_KEY set in env — will be stripped. "
+            "Subscription auth must still be reachable via keychain.")
+
+    # 2. Detect fresh / non-interactive SSH session — strong signal that the
+    #    login keychain will be locked for this process tree.
+    suspicious_ssh = bool(os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_CLIENT"))
+
+    # 3. Probe the keychain for the OAuth token the CLI actually uses.
+    try:
+        probe = subprocess.run(
+            ["security", "find-generic-password",
+             "-s", "Claude Code-credentials",
+             "-a", os.environ.get("USER", ""), "-w"],
+            capture_output=True, text=True, timeout=5,
+        )
+        token_reachable = probe.returncode == 0 and bool(probe.stdout.strip())
+    except Exception as exc:
+        log(f"PRE-FLIGHT ERROR: keychain probe crashed: {exc}")
+        token_reachable = False
+
+    if token_reachable:
+        log("Pre-flight OK: subscription OAuth token reachable in keychain.")
+        return
+
+    # Token NOT reachable — abort before burning retries.
+    msg_lines = [
+        "PRE-FLIGHT FAILED: subscription OAuth token not reachable.",
+        "  - 'security find-generic-password -s Claude Code-credentials' returned empty.",
+        "  - This almost always means the runner was launched from a fresh SSH session,",
+        "    which on macOS does NOT get the login keychain unlocked, so `claude -p`",
+        "    would fail with 'Not logged in · Please run /login' on every retry.",
+        "",
+        "  Fix: launch the runner from a keychain-capable context — i.e. directly",
+        "  from inside the current Claude Code session (Bash run_in_background), not",
+        "  via `ssh user@host 'nohup python3 autonomous_runner.py ...'` on the same host.",
+    ]
+    if suspicious_ssh:
+        msg_lines.append(f"  SSH_CONNECTION detected: {os.environ.get('SSH_CONNECTION','')}")
+    for line in msg_lines:
+        log(line)
+    # Hard abort — do NOT enter the retry loop.
+    raise SystemExit(2)
+
+
 # ── Claude execution ──────────────────────────────────────────────────────────
 
 def run_claude(prompt, timeout_seconds=600):
@@ -506,6 +568,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
+        preflight_auth_or_die()
         run_autonomous_task(args.prompt, args.email, args.max_retries, args.timeout)
     except Exception as e:
         log(f"FATAL ERROR: {e}\n{traceback.format_exc()}")

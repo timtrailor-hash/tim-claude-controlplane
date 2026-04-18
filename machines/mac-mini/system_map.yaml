@@ -196,6 +196,22 @@ services:
       max_age_hours: 3
     notes: "Shipped 2026-04-18 as the deterministic counter to probabilistic LLM reviews."
 
+
+  trend-tracker:
+    label: com.timtrailor.trend-tracker
+    purpose: "Daily metrics + Monday digest"
+    owner: trend_tracker.py
+    mode: StartCalendarInterval 07:15
+    code: ~/code/trend_tracker.py
+    secrets: [SMTP_PASS]
+    failure_mode: YELLOW
+    failure_impact: "trend visibility lost; no runtime impact"
+    probe:
+      type: file_age
+      path: /Users/timtrailor/code/trend_history.jsonl
+      max_age_hours: 36
+    notes: "Persistence infrastructure — makes slow decay visible via weekly digest."
+
   bgt-date-monitor:
     label: com.timtrailor.bgt-date-monitor
     purpose: "BGT ticket date monitoring"

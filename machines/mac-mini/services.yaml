@@ -129,6 +129,17 @@ services:
     auto_fix: false
     notes: "Writes /tmp/acceptance_results.json + appends ~/code/compliance_history.jsonl. Designed 2026-04-03, shipped 2026-04-18."
 
+  trend-tracker:
+    purpose: "Daily metrics snapshot + Monday email digest — decay visibility"
+    owner: trend_tracker.py
+    mode: StartCalendarInterval 07:15
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/trend_tracker.py
+    secrets: [SMTP_PASS]
+    failure_mode: "LOW — trend data stale, no runtime impact"
+    auto_fix: false
+    notes: "Reads compliance + monolith + lessons metrics, appends ~/code/trend_history.jsonl, emails digest on Mondays. Built 2026-04-18 for persistent 9/10 sustainment."
+
 cron_jobs:
   reboot_services:
     schedule: "@reboot"

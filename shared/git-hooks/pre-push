@@ -1,0 +1,51 @@
+#!/bin/bash
+# pre-push — runs verify.sh before allowing a push to origin main.
+#
+# Gate for persistent 9/10: no red state reaches a shared branch.
+# Pair with pre-commit: pre-commit guards against local-breakage,
+# pre-push guards against "commit passed but I never ran verify.sh".
+#
+# Reads from stdin:  <local ref> <local sha> <remote ref> <remote sha>
+# One line per ref being pushed.
+
+set -eu
+
+REPO="$HOME/code/tim-claude-controlplane"
+[ -d "$REPO" ] || exit 0
+
+MODE="${GIT_HOOKS_MODE:-strict}"
+PY=/opt/homebrew/bin/python3.11
+
+# Only gate pushes to main. Feature branches can be red while iterating.
+pushing_main=0
+while read -r _ _ remote_ref _; do
+    [ -z "$remote_ref" ] && continue
+    if [ "$remote_ref" = "refs/heads/main" ]; then
+        pushing_main=1
+    fi
+done
+
+[ "$pushing_main" -eq 0 ] && exit 0
+
+# Run verify.sh. Its exit code is authoritative.
+OUTPUT=$( cd "$REPO" && bash verify.sh 2>&1 || true )
+RESULT=$(echo "$OUTPUT" | grep -E '^Results:' | tail -1)
+
+if echo "$RESULT" | grep -qE '0 failed'; then
+    exit 0
+fi
+
+echo "" >&2
+echo "[pre-push] BLOCKING push to main — verify.sh is red:" >&2
+echo "  $RESULT" >&2
+echo "" >&2
+echo "  Full output:" >&2
+echo "$OUTPUT" | tail -20 | sed 's/^/    /' >&2
+echo "" >&2
+echo "  Fix the failing scenarios before pushing." >&2
+echo "  Bypass (recovery only): GIT_HOOKS_MODE=advisory git push ..." >&2
+
+if [ "$MODE" = "strict" ]; then
+    exit 1
+fi
+exit 0

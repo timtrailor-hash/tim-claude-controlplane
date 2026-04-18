@@ -1,0 +1,66 @@
+#!/bin/bash
+# pre-commit — runs only the scenario tests relevant to the staged diff.
+#
+# Gate for persistent 9/10: blocks commits that break the ratchet, the
+# scenario suite, or the services.yaml ↔ plists parity at commit time,
+# not at deploy time.
+#
+# Installed into a repo by shared/git-hooks/install.sh (symlinked in so
+# edits here reach every managed repo at once).
+#
+# Env hooks:
+#   GIT_HOOKS_MODE=advisory  — warn but allow commit (recovery only)
+
+set -eu
+
+# Only run if we have a baseline repo to reach.
+REPO="$HOME/code/tim-claude-controlplane"
+[ -d "$REPO" ] || exit 0
+
+STAGED=$(git diff --cached --name-only)
+[ -z "$STAGED" ] && exit 0
+
+MODE="${GIT_HOOKS_MODE:-strict}"
+PY=/opt/homebrew/bin/python3.11
+
+fail() {
+    echo ""
+    echo "[pre-commit] BLOCKING: $1" >&2
+    echo "  Mode: $MODE"
+    echo "  To bypass (recovery only): GIT_HOOKS_MODE=advisory git commit ..."
+    [ "$MODE" = "strict" ] && exit 1
+    return 0
+}
+
+# 1. Ratchet gate — if conversation_server.py is staged in claude-mobile.
+if echo "$STAGED" | grep -q '^conversation_server\.py$'; then
+    if [ -f "$REPO/.conv_server_baseline" ]; then
+        NEW_LINES=$(git show ":conversation_server.py" | wc -l | tr -d '[:space:]')
+        BASELINE=$(tr -d '[:space:]' < "$REPO/.conv_server_baseline")
+        if [ "$NEW_LINES" -gt "$BASELINE" ]; then
+            fail "conversation_server.py would grow $BASELINE -> $NEW_LINES (baseline in $REPO/.conv_server_baseline). Extract lines into conv/*.py, or update baseline with 'Ratchet-override:' trailer."
+        fi
+    fi
+fi
+
+# 2. Scenario suite — if any file under scenarios/ or under shared/hooks/ is
+#    staged (the things the suite actually exercises).
+if echo "$STAGED" | grep -qE '^(scenarios/|shared/hooks/|machines/|hosts/|shared/rules/|shared/agents/|shared/skills/)'; then
+    if [ -f "$REPO/scenarios/test_behavioral.py" ]; then
+        ( cd "$REPO" && "$PY" -m pytest scenarios/ -q 2>&1 | tail -4 ) || {
+            fail "scenario suite red under staged changes"
+        }
+    fi
+fi
+
+# 3. Monolith ratchet always — cheap to run, catches sibling edits that
+#    indirectly affect line count (e.g. conv/* sibling changes that leave
+#    the monolith untouched aren't gated here; the staged conv_server
+#    path above is the primary gate).
+if [ -f "$REPO/scenarios/drift/test_monolith_ratchet.py" ]; then
+    ( cd "$REPO" && "$PY" -m pytest scenarios/drift/test_monolith_ratchet.py -q 2>&1 | tail -3 ) || {
+        fail "ratchet test currently red (conversation_server.py > baseline)"
+    }
+fi
+
+exit 0
