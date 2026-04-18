@@ -1,0 +1,33 @@
+name: verify
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  portable-scenarios:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pyyaml
+      - name: Run portable scenarios
+        run: |
+          # Tests that do NOT require Mac Mini launchd, tmux, or the live
+          # filesystem. These are the hard invariants that must always be
+          # green on the remote. Mac-only tests still run in pre-push locally.
+          python -m pytest \
+            scenarios/test_behavioral.py \
+            scenarios/drift/test_git_hooks_installed.py::test_hook_installer_exists \
+            scenarios/drift/test_git_hooks_installed.py::test_hook_sources_exist \
+            scenarios/drift/test_git_hooks_installed.py::test_pre_commit_enforces_ratchet \
+            scenarios/drift/test_git_hooks_installed.py::test_pre_push_runs_verify \
+            scenarios/drift/test_monolith_ratchet.py::test_baseline_moves_toward_target \
+            scenarios/drift/test_monolith_ratchet.py::test_ratchet_fires_on_growth \
+            scenarios/drift/test_monolith_ratchet.py::test_ratchet_passes_on_shrink \
+            -v
