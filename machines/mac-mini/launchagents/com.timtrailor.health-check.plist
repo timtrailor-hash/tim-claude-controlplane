@@ -14,7 +14,7 @@
 	<key>StandardOutPath</key>
 	<string>/tmp/health_check.log</string>
 	<key>StartInterval</key>
-	<integer>3600</integer>
+	<integer>600</integer>
 	<key>WorkingDirectory</key>
 	<string>/Users/timtrailor/code</string>
 </dict>

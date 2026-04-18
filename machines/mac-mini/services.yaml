@@ -75,9 +75,9 @@ services:
     risk_note: "~/.keychain_pass is a plaintext root-of-trust bypass. Accepted risk for headless Mac Mini. chmod 600, excluded from unencrypted backups."
 
   health-check:
-    purpose: "Hourly health-check monitor — observe and alert"
+    purpose: "Health-check monitor (every 10 minutes) — observe and alert"
     owner: health_check.py
-    mode: StartInterval 3600
+    mode: StartInterval 600
     python: /opt/homebrew/bin/python3.11
     code: ~/code/health_check.py
     secrets: [SMTP_PASS]

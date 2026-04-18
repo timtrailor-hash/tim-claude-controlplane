@@ -234,7 +234,10 @@ if [ "$MACHINE" = "mac-mini" ] && [ -d "$MACHINE_DIR/launchagents" ]; then
             if [ "$DRY_RUN" = "1" ]; then
                 echo "  launchagent/$name: WOULD update"
             else
+                # Pattern 12 hardening: plists are chflags uchg. Toggle.
+                chflags nouchg "$LA_SUBDIR/$name" 2>/dev/null || true
                 cp "$plist" "$LA_SUBDIR/$name"
+                chflags uchg "$LA_SUBDIR/$name" 2>/dev/null || true
                 echo "  launchagent/$name: updated"
                 TOUCHED_PLISTS+=("$name")
                 CHANGES=1
