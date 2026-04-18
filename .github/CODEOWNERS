@@ -1,0 +1,29 @@
+# CODEOWNERS — Gemini Round-2 recommendation.
+#
+# Designates the enforcement-logic surfaces that should trigger explicit
+# code-owner review if any change touches them. For this single-maintainer
+# repo, CODEOWNERS is advisory: GitHub shows a "@timtrailor-hash review
+# requested" badge on any PR touching these paths, forcing a deliberate
+# pause before merge even when the author and owner are the same person.
+#
+# The simultaneous-modification attack (a PR that hollows portable-scenarios
+# AND the integrity sentinels in one commit) fundamentally requires
+# compromised commit access, at which point CI is theatre. This file raises
+# the friction for an authorized maintainer making a mistake, not a
+# defense against an attacker who already holds the admin key.
+
+# Enforcement artifacts — any change here wants a conscious review pass.
+.github/                       @timtrailor-hash
+shared/git-hooks/              @timtrailor-hash
+shared/hooks/                  @timtrailor-hash
+verify.sh                      @timtrailor-hash
+.conv_server_baseline          @timtrailor-hash
+scenarios/drift/               @timtrailor-hash
+scenarios/test_behavioral.py   @timtrailor-hash
+scenarios/credentials/         @timtrailor-hash
+
+# Host policy and service manifests — drift control surfaces.
+hosts/                         @timtrailor-hash
+machines/*/system_map.yaml     @timtrailor-hash
+machines/*/services.yaml       @timtrailor-hash
+machines/*/launchagents/       @timtrailor-hash
