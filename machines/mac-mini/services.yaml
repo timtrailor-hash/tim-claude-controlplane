@@ -118,6 +118,18 @@ services:
     auto_fix: false
     notes: "Evaluate: 10-min polling necessary? Consider webhook or hourly."
 
+  ci-failure-poller:
+    purpose: "Poll GitHub Actions for main-branch failures > 1h old; push to Terminal APNs. Replaces ntfy."
+    owner: ci_failure_poller.py
+    mode: StartInterval 900
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/ci_failure_poller.py
+    secrets:
+      - GITHUB_TOKEN  # via tim-credentials keychain service
+    failure_mode: YELLOW
+    failure_impact: "no persistent CI-red alerts surface on phone"
+    notes: "Replaces ratchet-persistence-check.yml (2026-04-18). Consolidates mobile alerting through APNs."
+
   acceptance-tests:
     purpose: "Empirical compliance tests — deterministic user-story verification every 2h"
     owner: acceptance_tests.py
