@@ -1,0 +1,62 @@
+name: integrity
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  # Second independent required status check (ChatGPT Round-1 hardening
+  # recommendation). Verifies that ENFORCEMENT files still exist and have
+  # their expected shapes — blocks a subtle attack where portable-scenarios
+  # workflow is edited to silently become permissive while keeping the same
+  # context string.
+  enforcement-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert enforcement files exist + have non-trivial shape
+        run: |
+          set -e
+          fail=0
+          check() {
+            local path="$1" min_bytes="$2" must_contain="$3"
+            if [ ! -f "$path" ]; then
+              echo "FAIL: $path missing"; fail=1; return
+            fi
+            local size=$(wc -c < "$path" | tr -d ' ')
+            if [ "$size" -lt "$min_bytes" ]; then
+              echo "FAIL: $path only $size bytes (<$min_bytes)"; fail=1
+            fi
+            if [ -n "$must_contain" ] && ! grep -q "$must_contain" "$path"; then
+              echo "FAIL: $path missing expected token '$must_contain'"; fail=1
+            fi
+            echo "OK: $path ($size bytes)"
+          }
+          check .github/workflows/verify.yml 200 "pytest"
+          check .github/workflows/enforcement-state.yml 200 "enforcement"
+          check shared/git-hooks/pre-commit 200 ".conv_server_baseline"
+          check shared/git-hooks/pre-push 100 "verify.sh"
+          check shared/git-hooks/post-commit 100 "commit_audit"
+          check shared/hooks/protected_path_hook.sh 200 "LaunchAgent"
+          check shared/hooks/credential_leak_hook.sh 200 "sk-ant"
+          check verify.sh 200 "passed, "
+          check .conv_server_baseline 2 ""
+          check scenarios/drift/test_monolith_ratchet.py 200 "test_ratchet_fires_on_growth"
+          check scenarios/drift/test_git_hooks_installed.py 200 "test_hooks_installed_in_managed_repos"
+          if [ "$fail" -eq 1 ]; then
+            echo ""
+            echo "ENFORCEMENT INTEGRITY FAILED — a control file is missing or weakened"
+            exit 1
+          fi
+          echo ""
+          echo "All enforcement artifacts intact."
+
+      - name: Alert on main failure
+        if: failure() && github.ref == 'refs/heads/main'
+        run: |
+          curl -sS -X POST \
+            -H "Title: Enforcement integrity breach (tim-claude-controlplane)" \
+            -H "Priority: 5" \
+            -H "Tags: rotating_light,shield" \
+            -d "integrity.yml detected a control file missing or weakened. Commit ${GITHUB_SHA::7}. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            https://ntfy.sh/timtrailor-claude

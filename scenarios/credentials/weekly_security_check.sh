@@ -25,8 +25,11 @@ ACTIVE_PLISTS_DIR="$HOME/Library/LaunchAgents"
 if [ -d "$ACTIVE_PLISTS_DIR" ]; then
   while IFS= read -r plist; do
     [ -z "$plist" ] && continue
-    # Match known bad strings from the audit.
-    if grep -qE 'Printer2025|Claude2025|tim:[A-Za-z0-9]+!' "$plist" 2>/dev/null; then
+    # Generic pattern: any `--credential USER:PASSWORD` shape, or a
+    # password-style assignment. Deliberately NOT listing specific strings
+    # (public repo — don't advertise historic credential literals).
+    # Structure-based detection still catches any plaintext-in-plist.
+    if grep -qE '(--credential[[:space:]]+[[:alnum:]_-]+:[^[:space:]"'"'"']{4,})|(password[[:space:]]*[=:][[:space:]]*["'"'"']\w{4,}["'"'"'])' "$plist" 2>/dev/null; then
       FAILURES+=("hardcoded_password_in_plist: $plist")
     fi
   done < <(find "$ACTIVE_PLISTS_DIR" -maxdepth 1 -name 'com.timtrailor.*.plist' -not -path '*_quarantine*')
