@@ -1,0 +1,48 @@
+name: enforcement-state
+on:
+  schedule:
+    - cron: '15 * * * *'  # every hour at :15
+  workflow_dispatch:
+
+jobs:
+  verify-enforcement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check repo-state invariants
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          failures=""
+
+          # 1. This repo's verify.yml workflow is present.
+          if [ ! -f .github/workflows/verify.yml ]; then
+            failures="${failures}\n- verify.yml missing from controlplane"
+          fi
+
+          # 2. claude-mobile has branch protection on main (public repo, free tier).
+          #    The 403 case would also be a fail.
+          resp=$(gh api "repos/timtrailor-hash/claude-mobile/branches/main/protection" 2>&1 || true)
+          if ! echo "$resp" | grep -q '"allow_force_pushes"'; then
+            failures="${failures}\n- claude-mobile main branch protection not reporting expected shape: ${resp:0:200}"
+          fi
+
+          # 3. claude-mobile ratchet.yml workflow file present on main.
+          resp2=$(gh api "repos/timtrailor-hash/claude-mobile/contents/.github/workflows/ratchet.yml" --jq '.name' 2>&1 || true)
+          if [ "$resp2" != "ratchet.yml" ]; then
+            failures="${failures}\n- claude-mobile ratchet.yml not found at expected path: $resp2"
+          fi
+
+          if [ -n "$failures" ]; then
+            printf "ENFORCEMENT-STATE FAIL:%b\n" "$failures"
+            # Alert fast — this is the state-of-the-controls check.
+            curl -sS -X POST \
+              -H "Title: Enforcement state drift" \
+              -H "Priority: 5" \
+              -H "Tags: rotating_light,warning" \
+              -d "Controls drifted. $(printf '%b' "$failures")" \
+              https://ntfy.sh/timtrailor-claude
+            exit 1
+          fi
+          echo "OK: all enforcement invariants hold"

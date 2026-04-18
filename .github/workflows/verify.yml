@@ -16,15 +16,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest pyyaml
-      - name: Wire shared hooks to ~/.claude/hooks (behavioral tests expect this path)
+      - name: Wire shared hooks to ~/.claude/hooks
         run: |
           mkdir -p "$HOME/.claude"
           ln -sfn "$GITHUB_WORKSPACE/shared/hooks" "$HOME/.claude/hooks"
       - name: Run portable scenarios
         run: |
-          # Portable subset: pure-logic tests + hook/behavioral tests that
-          # work once ~/.claude/hooks is wired above. Mac-only tests
-          # (launchctl, tmux, live filesystem) stay out.
           python -m pytest -v \
             scenarios/test_behavioral.py \
             scenarios/drift/test_git_hooks_installed.py::test_hook_installer_exists \
@@ -34,3 +31,16 @@ jobs:
             scenarios/drift/test_monolith_ratchet.py::test_baseline_moves_toward_target \
             scenarios/drift/test_monolith_ratchet.py::test_ratchet_fires_on_growth \
             scenarios/drift/test_monolith_ratchet.py::test_ratchet_passes_on_shrink
+
+      # Gemini R1 #2: when main is red, alert immediately — don't wait for
+      # the Monday digest. Uses the public ntfy topic; message is generic
+      # enough to leak no internal paths.
+      - name: Alert on main failure
+        if: failure() && github.ref == 'refs/heads/main'
+        run: |
+          curl -sS -X POST \
+            -H "Title: CI RED on main (tim-claude-controlplane)" \
+            -H "Priority: 5" \
+            -H "Tags: rotating_light,warning" \
+            -d "verify.yml failed on push to main. Commit ${GITHUB_SHA::7}. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            https://ntfy.sh/timtrailor-claude
