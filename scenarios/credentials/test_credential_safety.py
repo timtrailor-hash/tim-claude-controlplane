@@ -80,7 +80,9 @@ class TestProtectedPathHook:
             text=True,
             timeout=15,
         )
-        assert proc.returncode == 2, f"launchctl load should be blocked (rc={proc.returncode})"
+        assert proc.returncode == 0 and '"permissionDecision": "ask"' in proc.stdout, (
+            f"launchctl load should emit ask-decision (rc={proc.returncode}, stdout={proc.stdout!r})"
+        )
 
     def test_sec011_blocks_sudo_reboot(self):
         """SEC-011: sudo reboot must be blocked."""
@@ -92,4 +94,6 @@ class TestProtectedPathHook:
             text=True,
             timeout=15,
         )
-        assert proc.returncode == 2, f"sudo reboot should be blocked (rc={proc.returncode})"
+        assert proc.returncode == 0 and '"permissionDecision": "ask"' in proc.stdout, (
+            f"sudo reboot should emit ask-decision (rc={proc.returncode}, stdout={proc.stdout!r})"
+        )
