@@ -37,26 +37,28 @@ class TestProtectedPathBehavioral:
     def test_beh001_blocks_launchctl_bootstrap(self):
         """BEH-001: launchctl bootstrap must be denied."""
         payload = {"tool_name": "Bash", "tool_input": {"command": "launchctl bootstrap gui/501 ~/Library/LaunchAgents/test.plist"}}
-        _, stderr, rc = _run_hook("protected_path_hook.sh", payload)
-        assert rc == 2, f"launchctl bootstrap should be blocked (rc={rc}, stderr={stderr})"
+        stdout, stderr, rc = _run_hook("protected_path_hook.sh", payload)
+        assert rc == 0 and '"permissionDecision": "ask"' in stdout, (
+            f"launchctl bootstrap should emit ask-decision (rc={rc}, stdout={stdout!r}, stderr={stderr!r})"
+        )
 
     def test_beh002_blocks_launchctl_bootout(self):
         """BEH-002: launchctl bootout must be denied."""
         payload = {"tool_name": "Bash", "tool_input": {"command": "launchctl bootout gui/501/com.test"}}
-        _, stderr, rc = _run_hook("protected_path_hook.sh", payload)
-        assert rc == 2
+        stdout, _, rc = _run_hook("protected_path_hook.sh", payload)
+        assert rc == 0 and '"permissionDecision": "ask"' in stdout
 
     def test_beh003_blocks_sudo_shutdown(self):
         """BEH-003: sudo shutdown must be denied."""
         payload = {"tool_name": "Bash", "tool_input": {"command": "sudo shutdown -h now"}}
-        _, stderr, rc = _run_hook("protected_path_hook.sh", payload)
-        assert rc == 2
+        stdout, _, rc = _run_hook("protected_path_hook.sh", payload)
+        assert rc == 0 and '"permissionDecision": "ask"' in stdout
 
     def test_beh004_blocks_launchagent_write(self):
         """BEH-004: writing to LaunchAgents dir must be denied."""
         payload = {"tool_name": "Bash", "tool_input": {"command": "cp malware.plist ~/Library/LaunchAgents/"}}
-        _, stderr, rc = _run_hook("protected_path_hook.sh", payload)
-        assert rc == 2
+        stdout, _, rc = _run_hook("protected_path_hook.sh", payload)
+        assert rc == 0 and '"permissionDecision": "ask"' in stdout
 
     def test_beh005_allows_launchagent_read(self):
         """BEH-005: reading LaunchAgent plists should be allowed."""
@@ -73,8 +75,8 @@ class TestProtectedPathBehavioral:
     def test_beh007_blocks_chflags(self):
         """BEH-007: chflags immutability changes must be denied."""
         payload = {"tool_name": "Bash", "tool_input": {"command": "chflags uchg important_file"}}
-        _, stderr, rc = _run_hook("protected_path_hook.sh", payload)
-        assert rc == 2
+        stdout, _, rc = _run_hook("protected_path_hook.sh", payload)
+        assert rc == 0 and '"permissionDecision": "ask"' in stdout
 
 
 class TestCredentialLeakBehavioral:
