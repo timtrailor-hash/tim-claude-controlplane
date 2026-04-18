@@ -181,6 +181,22 @@ services:
     notes: "Output /tmp/health_check_results.json is the iOS Claude Control app's data source"
 
 
+  ci-failure-poller:
+    label: com.timtrailor.ci-failure-poller
+    purpose: "CI red persistence check → Terminal APNs (every 15 min)"
+    owner: ci_failure_poller.py
+    mode: StartInterval 900
+    code: ~/code/ci_failure_poller.py
+    secrets:
+      - GITHUB_TOKEN  # via tim-credentials keychain service
+    failure_mode: YELLOW
+    failure_impact: "no CI-red alerts surface on phone; GitHub iOS off by design"
+    probe:
+      type: file_age
+      path: /tmp/ci_failure_poller.log
+      max_age_hours: 1
+    notes: "Replaces ratchet-persistence-check.yml ntfy path (2026-04-18). Consolidates mobile alerting through APNs."
+
   acceptance-tests:
     label: com.timtrailor.acceptance-tests
     purpose: "Empirical compliance tests — every 2h"
