@@ -24,6 +24,26 @@ if [ -z "$COMMAND" ]; then
     exit 0
 fi
 
+# SSH commands operate on a different machine. The remote host has its
+# own hooks and its own safety rules; scanning the SSH payload for local
+# path names generates false positives (e.g. `ssh host "ls ~/Library/
+# LaunchAgents"` would otherwise match Pattern 1 below). Printer gcode
+# and destructive patterns still match further down if they appear in
+# an SSH command, because those regex patterns intentionally include
+# explicit printer IPs or filesystem markers that are NOT local-only.
+if echo "$COMMAND" | grep -qE '^(ssh |scp )'; then
+    # Still apply printer-specific patterns (7) since they reference
+    # printer IPs and are equally dangerous over SSH. Everything else
+    # skips.
+    if echo "$COMMAND" | grep -qE 'ssh.*192\.168\.0\.108' || \
+       echo "$COMMAND" | grep -qE 'curl.*192\.168\.0\.108.*gcode/script'; then
+        if echo "$COMMAND" | grep -qiE '(FIRMWARE_RESTART|RESTART[^_]|G28|PROBE|QUAD_GANTRY_LEVEL|BED_MESH_CALIBRATE|SAVE_CONFIG)'; then
+            ask "Dangerous printer gcode via SSH. Confirm print_stats.state first."
+        fi
+    fi
+    exit 0
+fi
+
 ask() {
     python3 -c "
 import json, sys
