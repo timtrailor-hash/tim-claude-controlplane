@@ -17,14 +17,24 @@ PRINTER_IP = os.environ.get("TEST_PRINTER_IP", "192.168.0.108")
 
 
 def _run_printer_hook(command_str):
-    """Run printer-safety-check.sh with a simulated Bash tool input."""
+    """Run printer-safety-check.sh with a simulated Bash tool input.
+
+    Redirects PRINTER_AUDIT_LOG to a per-test sandbox path so repeated
+    test runs don't pollute ~/.claude/printer_audit.log with entries
+    indistinguishable from real attempts (Tim flagged this 2026-04-22
+    after seeing every git commit's pre-commit pytest leave paired
+    BLOCKED_ALWAYS entries in the production audit log).
+    """
     hook_input = {"tool_input": {"command": command_str}}
+    test_env = os.environ.copy()
+    test_env["PRINTER_AUDIT_LOG"] = "/tmp/test_printer_audit.log"
     proc = subprocess.run(
         ["bash", str(HOOKS_DIR / "printer-safety-check.sh")],
         input=json.dumps(hook_input),
         capture_output=True,
         text=True,
         timeout=15,
+        env=test_env,
     )
     return proc.stdout, proc.stderr, proc.returncode
 

@@ -13,7 +13,15 @@ import os
 from datetime import datetime, timezone
 
 CONFIG_PATH = os.path.expanduser("~/.claude/printer_config.toml")
-LOG_FILE = os.path.expanduser("~/.claude/printer_audit.log")
+# PRINTER_AUDIT_LOG env override lets the scenario test suite redirect
+# the audit log to /tmp so test runs don't pollute the production log.
+# Without this, every `git commit` that triggers pre-commit tests
+# generates BLOCKED_ALWAYS entries indistinguishable from real attempts
+# (Tim flagged 2026-04-22).
+LOG_FILE = os.environ.get(
+    "PRINTER_AUDIT_LOG",
+    os.path.expanduser("~/.claude/printer_audit.log"),
+)
 
 
 def load_config():
