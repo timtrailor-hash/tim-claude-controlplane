@@ -29,6 +29,7 @@ The combined output is a consolidated APPROVE / CHANGES REQUESTED / BLOCK verdic
 - `+mini` — force the cheaper model variants (gemini-2.5-flash + gpt-5.4-mini) for both reviewers
 - `+full` — force the expensive variants (gemini-2.5-pro + gpt-5.4) for both reviewers
 - `+claude-only` — skip Gemini and ChatGPT (cheap mode)
+- `+deep` — **pre-step: run `/deep-context` first on "what has broken in this code area before and why did each fix fail", then pass the synthesis to the reviewers as prior context.** Use for changes in recurring-failure areas (prompt buttons, permission hooks, printer daemons, memory server). Adds ~15M Opus tokens and ~20-40 min wallclock. Reviewers evaluate the change against substrate history rather than on its own merits. Off by default — opt in when you suspect this change might be the Nth attempt at something that keeps regressing.
 
 By default, model selection is auto:
 - **<200 changed lines AND not sensitive** → mini variants
@@ -43,6 +44,26 @@ A change is "sensitive" if `~/.claude/hooks/sensitivity_check.sh` flags it. The 
 If any of those match, the review uses full models regardless of line count. False positives are fine — wasting a few cents on a careful review beats missing a real bug.
 
 ## Steps
+
+### 0. Optional deep-context pre-step (`+deep` only)
+
+If `$ARGUMENTS` contains `+deep`, before running the normal review
+pipeline, invoke `/deep-context` with a brief of the form:
+
+"Changes in `<paths from git diff --stat>` touch an area with
+historical regressions. Assemble the full prior history: past fix
+attempts in this area, what was tried, why each attempt failed,
+cross-cutting patterns, and unresolved threads that touch these
+files. I need this to evaluate whether the current change addresses
+the real substrate or patches a symptom."
+
+Save the resulting synthesis. Prepend it to the brief you give each
+reviewer in step 4 as "HISTORICAL CONTEXT for this area:". The
+reviewers should evaluate the change against that history, not on
+its own merits.
+
+Do not run this step if `+deep` is absent. The overhead is only
+justified when the change is in a recurring-failure area.
 
 ### 1. Determine scope and tier
 

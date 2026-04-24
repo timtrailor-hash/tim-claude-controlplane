@@ -20,6 +20,7 @@ This is the right tool for irreversible decisions: architecture changes, daemon 
 - `+full` — force full models (Opus + gpt-5.4 + gemini-2.5-pro). Default for `/debate`.
 - `+mini` — use mini models (Opus + gpt-5.4-mini + gemini-2.5-flash). Claude is always Opus regardless.
 - `+rounds=N` — max rounds before forced termination (default 4)
+- `+deep` — pre-step: run `/deep-context` on the decision area first, pass the synthesis into Round 0 as prior context for all three debaters. Use for decisions that revisit ground we have covered before (which is most high-stakes decisions on an established system). Each debater evaluates the current proposal against substrate history rather than arguing from scratch. Adds ~15M Opus tokens and ~20-40 min wallclock. Turns a shallow "should we X" debate into an informed "given Y prior attempts, why does X differ" debate.
 
 Note: `/debate` defaults to **full models** because the whole point is high-stakes decisions. Use `+mini` only if you're testing the workflow itself.
 
@@ -119,6 +120,24 @@ If max rounds hit without convergence:
 **Anti-anchoring design**: Round 0 is blind. Gemini and ChatGPT receive ONLY the context — not Claude's position. Claude writes its position to file but the script does NOT read it. All three positions are revealed simultaneously after Round 0 completes. The debate (with cross-model visibility) starts at Round 1.
 
 ## Steps
+
+### 0. Optional deep-context pre-step (`+deep` only)
+
+If `$ARGUMENTS` contains `+deep`, before step 1 run `/deep-context`
+with a brief shaped as:
+
+"The decision under debate is: <paste the scope from $ARGUMENTS>. I
+need the full prior history of this decision area: what has been
+tried, what has been proposed and rejected, cross-cutting patterns
+that affect the decision, and unresolved threads. Synthesise so three
+independent debaters can evaluate the current proposal against
+substrate history rather than arguing it from first principles."
+
+Save the synthesis as `/tmp/debate_prior_context.md`. In step 1,
+prepend it to `/tmp/debate_context.md` under a "HISTORICAL CONTEXT"
+heading. All three debaters then see it in Round 0.
+
+Do not run this step if `+deep` is absent.
 
 ### 1. Gather context once
 
