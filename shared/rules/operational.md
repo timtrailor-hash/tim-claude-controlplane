@@ -52,52 +52,12 @@ Before any commit that changes an IP address, hostname, port, or network configu
 4. Spawn a review agent to fact-check the change against memory files and live state
 5. If the change reverts a previous value, find the commit that set it and understand WHY
 
-## Memory query shapes
+## Memory rules
 
-When searching my own memory (MCP `search_memory`, `search_exact`, or
-`/deep-context`), pick the tool that matches the query shape:
-
-- **Exploration** ("have we touched this area?") → `search_memory`
-  (ChromaDB semantic). Returns loosely related sessions; good for
-  surfacing the neighbourhood.
-- **Retrieval** ("what exactly did we decide about X?") →
-  `search_exact` (FTS5) when the query contains an identifier (path,
-  commit SHA, IP, error string). Exact matches beat semantic neighbours
-  for this shape.
-- **Synthesis** ("why does this pattern keep failing?") →
-  `/deep-context --synthesise`. Single searches cannot produce the
-  cross-session synthesis this shape needs. Do not try to answer
-  synthesis questions with `search_memory`.
-
-A recurring failure mode is asking a synthesis question and accepting
-the first semantic-search result as the answer. The answer will look
-plausible and be incomplete.
-
-## Why-did-this-regress pattern
-
-When a test breaks, a daemon fails, or a fix stops working, the first
-move is `/deep-context` with a brief shaped as "X has broken before;
-current symptom is Y; what has been tried and why did each attempt
-fail". Diagnose from the synthesis, not from scratch. This was the
-pattern that caught the prompt-button root cause on 2026-04-23 after
-five prior fixes had all patched the wrong substrate.
-
-## Topics are the only curated layer
-
-`memory/topics/*.md` are hand-maintained truth. Every other artefact
-(ChromaDB index, FTS5 index, prestripped corpus, compressed session
-summaries if any) is derived and can be regenerated from raw JSONL
-plus topics. When a derived artefact drifts, regenerate it; do not
-hand-edit it. Hand-editing a derived artefact creates state that
-cannot be replayed and will drift again.
-
-## Raw session transcripts are archived forever
-
-The `*.jsonl` files under `~/.claude/projects/` are the source of
-truth. They are not compressed, summarised for storage, or deleted.
-Any "tidy up old sessions" instinct is wrong. Storage is cheap,
-model readers are abundant, and future synthesis depends on having
-the full history available.
+- **Three query shapes, three tools.** Exploration ("have we touched this?") → `search_memory` (semantic). Retrieval ("what exactly did we decide about X?") → `search_exact` (FTS5) when the query has an identifier. Synthesis ("why does this keep failing?") → `/deep-context --synthesise`. Never answer a synthesis question with a single semantic search.
+- **Why-did-this-regress pattern.** When a fix stops working, first action is `/deep-context` on "X has broken before; current symptom Y; what was tried and why each failed" — not from-scratch debugging.
+- **Topics are the only curated layer.** `memory/topics/*.md` are truth. Chroma/FTS/prestripped corpus are derived; regenerate, don't hand-edit.
+- **Raw JSONLs archived forever.** `~/.claude/projects/*.jsonl` never deleted, compressed, or summarised for storage. Storage is cheap; future synthesis needs the history.
 
 ## RCA Depth Standard
 When conducting any Root Cause Analysis, ALWAYS analyse all layers:
