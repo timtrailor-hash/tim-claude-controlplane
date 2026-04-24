@@ -25,6 +25,7 @@ allowed_launchagents:
   - com.timtrailor.governors
   - com.timtrailor.health-check
   - com.timtrailor.printer-snapshots
+  - com.timtrailor.stale-pr-alert          # hourly PR-age alert (added 2026-04-24)
   - com.timtrailor.streamlit-https
   - com.timtrailor.system-monitor        # legacy; scheduled for retirement
   - com.timtrailor.token-refresh
