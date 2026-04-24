@@ -1,0 +1,40 @@
+name: Claude Code Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write  # required by anthropics/claude-code-action for OIDC
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude Code Review
+        # Pinned to v1 SHA (resolved 2026-04-07) — float to v1 only when intentionally upgrading
+        uses: anthropics/claude-code-action@f2accb9a171bd71f4b5c93bcea23876aa5244edb
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-haiku-4-5-20251001
+          direct_prompt: |
+            You are reviewing this control-plane PR against Tim's quality bar. Be terse.
+
+            Apply these checks:
+            1. Security: hardcoded credentials in any shared/rules/, shared/hooks/, or scenarios/ file; command injection in hooks; unsafe subprocess; leaked tokens.
+            2. Correctness: null/None handling, error paths, race conditions, silent failures (Pattern 3 — handler catches exception then returns pass-through).
+            3. Hook sanity: any new PreToolUse hook must return {"hookSpecificOutput": {"hookEventName": ..., "permissionDecision": "allow|deny|ask", "permissionDecisionReason": "..."}}. Matcher "" or top-level tool-name keys break CLI startup.
+            4. Rules conciseness: shared/rules/*.md files have a 100-line budget (enforced by scenarios/context/test_context_budgets.py::test_rules_files_are_concise). Don't add verbose prose there; use topics/ files.
+            5. Ratchet awareness: if conversation_server.py in sibling claude-mobile repo would grow past .conv_server_baseline, flag it — the DRIFT10 acceptance test will fail.
+
+            Format findings as:
+            - [SEVERITY] file:line — issue (one-line fix)
+
+            If no issues, reply "LGTM".
