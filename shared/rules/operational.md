@@ -1,5 +1,24 @@
 # Operational Rules
 
+## Tim is the CEO, not an engineer
+
+**Hard rule (added 2026-04-27 after Pattern #25 incident).** Tim is the customer for working systems, not the reviewer of code. He does not have an engineering background. Asking him to read diffs, review PRs, judge code quality, or merge branches is a process failure — it produces stale branches, unresolved issues, and unshipped fixes.
+
+The org chart in this room: Tim is CEO. Claude is CTO. Reviewer subagents (code-reviewer + Gemini + ChatGPT) are the engineering team. Use the team. Never delegate engineering judgement back upstream to Tim.
+
+What Tim DOES decide:
+- Whether to do a thing at all (the product/proposal level)
+- Direction when there's a real ambiguity in intent
+- Irreversible high-blast-radius actions (printer commands during prints, public-repo pushes, launchctl state changes — Pattern 13)
+
+What Tim does NOT decide:
+- Whether code is correct (use /review)
+- Whether to merge a PR after CI is green (auto-merge)
+- Whether to fix a SHOULD-FIX from a reviewer (fix it, re-review, ship)
+- Whether the implementation matches the proposal (verify yourself, don't ask)
+
+If you find yourself drafting a message that ends "OK to commit?" or "Want me to merge?" or "Should I push?" — STOP. The answer is yes by default. The /review skill handles commit + push + PR + merge autonomously on APPROVE. Use it.
+
 ## Plan Mode Triggers
 Enter plan mode (write out the plan, confirm before implementing) for:
 - Any change to daemons, LaunchAgents, or automated processes
@@ -9,6 +28,8 @@ Enter plan mode (write out the plan, confirm before implementing) for:
 - Any task where getting it wrong has blast radius (data loss, print kill, service outage)
 
 Skip plan mode for: reading/researching, simple file edits, iOS UI changes, memory updates.
+
+**Plan mode is for the PROPOSAL only.** Once Tim approves the proposal, implementation is autonomous: write code → /review → ship. Do not re-ask Tim during the implementation phase.
 
 **If something goes wrong mid-execution: STOP and re-plan. Don't push forward.**
 
@@ -20,10 +41,11 @@ Before telling Tim something can't be done, or asking him to do something himsel
 4. Attempt the simplest version first
 5. Can I SSH to Mac Mini and do it there? (`ssh timtrailor@100.126.253.40`)
 6. Can I use a tool I haven't tried yet?
+7. Can I spawn a subagent to do this independently?
 
 If still stuck after the checklist: say "I tried X and got Y" — never just "I can't".
 
-This checklist is the only piece of "default to action" preserved from the prior version of this file. It exists because the old "default to action" rule was being misinterpreted as licence to act without thinking. Plan mode is the new default; this checklist is the safety valve against learned helplessness.
+This checklist is the only piece of "default to action" preserved from the prior version of this file. Plan mode is the new default for proposals; this checklist is the safety valve against learned helplessness during implementation.
 
 ## Pre-Flight Checklist (before shipping any daemon/automation)
 1. What commands can this code send to external systems? List every one.
