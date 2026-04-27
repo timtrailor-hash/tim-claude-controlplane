@@ -395,6 +395,37 @@ if [ -x "$HOST_MANIFEST_SCRIPT" ]; then
     fi
 fi
 
+# 6d. Live Activity hook endpoint smoke test (Mac Mini only).
+#
+# 2026-04-27 (Pattern 3 + Pattern 17): the 2026-04-18 deploy silently dropped
+# Stop / UserPromptSubmit hooks. validate_hooks.sh now catches the static
+# regression (empty arrays). This smoke test catches the runtime side: does
+# the conversation_server endpoint actually accept the payload format the
+# hook produces?
+#
+# Uses tmux_session="verify-smoke" — a NON-MOBILE synthetic session — so the
+# server returns {"ok":true,"ignored":...} via the guard at line 5650.
+# Asserts (a) HTTP 200 and (b) the response body has "ignored": confirms both
+# the JSON parser and the guard logic. NEVER mutates real Live Activity state
+# because we never enter the mobile dispatch path.
+if [ "$(hostname -s)" = "Tims-Mac-mini" ]; then
+    HOOK_URL="http://127.0.0.1:8081/internal/claude-hook"
+    SMOKE_PAYLOAD='{"event":"Stop","session_id":"verify-smoke","transcript_path":"","cwd":"","pane_pid":"","pane_id":"","window_index":"","tmux_session":"verify-smoke","prompt_preview":""}'
+    SMOKE_RESP=$(curl -sS -m 3 -X POST "$HOOK_URL" \
+        -H "Content-Type: application/json" --data-binary "$SMOKE_PAYLOAD" \
+        -w "\n%{http_code}" 2>/dev/null)
+    SMOKE_BODY=$(echo "$SMOKE_RESP" | sed '$d')
+    SMOKE_CODE=$(echo "$SMOKE_RESP" | tail -1)
+    if [ "$SMOKE_CODE" = "200" ] && echo "$SMOKE_BODY" | grep -q '"ignored"'; then
+        check "claude-hook endpoint accepts payload + applies tmux guard" "0"
+    elif [ -z "$SMOKE_CODE" ] || [ "$SMOKE_CODE" = "000" ]; then
+        # conversation_server may not be running during deploy. WARN, not FAIL.
+        check "claude-hook endpoint reachable (server down?)" "2"
+    else
+        check "claude-hook endpoint returned HTTP=$SMOKE_CODE body=$SMOKE_BODY" "1"
+    fi
+fi
+
 # 7. Run pytest scenarios (unless --quick)
 if [ "$QUICK" = "0" ] && [ -d "$REPO_DIR/scenarios" ]; then
     if /opt/homebrew/bin/python3.11 -m pytest --version 2>/dev/null >/dev/null 2>&1; then
