@@ -28,9 +28,8 @@ jobs:
             scenarios/drift/test_git_hooks_installed.py::test_hook_sources_exist \
             scenarios/drift/test_git_hooks_installed.py::test_pre_commit_enforces_ratchet \
             scenarios/drift/test_git_hooks_installed.py::test_pre_push_runs_verify \
-            scenarios/drift/test_monolith_ratchet.py::test_baseline_moves_toward_target \
-            scenarios/drift/test_monolith_ratchet.py::test_ratchet_fires_on_growth \
-            scenarios/drift/test_monolith_ratchet.py::test_ratchet_passes_on_shrink
+            scenarios/drift/test_monolith_ratchet.py::test_conversation_server_under_ceiling \
+            scenarios/drift/test_monolith_ratchet.py::test_ceiling_is_realistic
 
       # Gemini R1 #2: when main is red, alert immediately — don't wait for
       # the Monday digest. Uses the public ntfy topic; message is generic

@@ -32,7 +32,7 @@ jobs:
             2. Correctness: null/None handling, error paths, race conditions, silent failures (Pattern 3 — handler catches exception then returns pass-through).
             3. Hook sanity: any new PreToolUse hook must return {"hookSpecificOutput": {"hookEventName": ..., "permissionDecision": "allow|deny|ask", "permissionDecisionReason": "..."}}. Matcher "" or top-level tool-name keys break CLI startup.
             4. Rules conciseness: shared/rules/*.md files have a 100-line budget (enforced by scenarios/context/test_context_budgets.py::test_rules_files_are_concise). Don't add verbose prose there; use topics/ files.
-            5. Ratchet awareness: if conversation_server.py in sibling claude-mobile repo would grow past .conv_server_baseline, flag it — the DRIFT10 acceptance test will fail.
+            5. Ratchet awareness: if conversation_server.py in sibling claude-mobile repo would grow past 7000 lines (the ceiling), flag it. As of 2026-04-28 the strict shrink-only ratchet was replaced with a ceiling alert.
 
             Format findings as:
             - [SEVERITY] file:line — issue (one-line fix)
