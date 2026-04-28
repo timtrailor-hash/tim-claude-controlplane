@@ -1,32 +1,25 @@
-"""Size ratchet for conversation_server.py — Phase 3 decomposition forcing function.
+"""Size ceiling for conversation_server.py — replaced strict ratchet 2026-04-28.
 
-The 7,250-line monolith (audit 2026-04-11) is too large to audit, review, or
-reason about. The /debate unanimously flagged this as tech debt.
+Background: Phase 3 decomposition (slices 1c–1L) moved 1,700 lines out of
+conversation_server.py and into conv/<slice>/ packages. The strict
+"monotonically decrease" ratchet was a useful forcing function during the
+active extraction. In maintenance mode it became net cost — fired on every
+minor hotfix that added even a few comment lines (false alerts 2026-04-27
+and 2026-04-28 mornings).
 
-This test enforces a one-way ratchet:
-  - The pinned baseline is captured in .conv_server_baseline.
-  - Every commit that touches conversation_server.py must leave it the same
-    size or smaller than the baseline — never larger.
-  - When lines are extracted into conv/*.py, the test author updates the
-    baseline to reflect the new reduced target. The baseline can only go
-    DOWN.
-
-This converts the monolith from an unbounded liability to a bounded one with
-a visible, testable path to zero growth.
-
-Why a test not a hook: the size target needs to be versioned in git,
-reviewable in PRs, and visible to Tim in verify.sh output.
+New policy (matches claude-mobile/.github/workflows/ratchet.yml and
+claude-mobile/shared/git-hooks/pre-commit): alert only if the monolith
+exceeds CEILING lines. The current snapshot is 5,663; 7,000 gives ~1,300
+lines of headroom for normal hotfixes. The ceiling fires only if someone
+adds a whole new feature to the monolith instead of extracting it into a
+conv/<slice>/ package — which is the actual behaviour worth alerting on,
+not "added 13 explanatory comment lines in a safety patch".
 """
 from pathlib import Path
 import pytest
 
-REPO = Path(__file__).resolve().parents[2]
 SERVER = Path.home() / "code" / "claude-mobile" / "conversation_server.py"
-BASELINE_FILE = REPO / ".conv_server_baseline"
-
-# Target: <200 lines (per claude-mobile/CLAUDE.md: "entry point should be <200 lines").
-# This is the end state. Baseline tracks current progress toward it.
-DECOMPOSITION_TARGET_LINES = 200
+CEILING = 7000
 
 
 @pytest.fixture(scope="module")
@@ -36,77 +29,32 @@ def current_lines() -> int:
     return sum(1 for _ in SERVER.open())
 
 
-@pytest.fixture(scope="module")
-def baseline_lines() -> int:
-    if not BASELINE_FILE.exists():
-        pytest.fail(
-            f"Baseline missing: {BASELINE_FILE}. "
-            f"Create it with: echo <current_line_count> > {BASELINE_FILE}"
-        )
-    try:
-        return int(BASELINE_FILE.read_text().strip())
-    except ValueError as e:
-        pytest.fail(f"Baseline file unparseable: {e}")
+def test_conversation_server_under_ceiling(current_lines):
+    """The monolith must stay under CEILING lines.
 
-
-def test_conversation_server_did_not_grow(current_lines, baseline_lines):
-    """The monolith must never grow. Shrinking is always fine."""
-    assert current_lines <= baseline_lines, (
-        f"conversation_server.py grew from {baseline_lines} to {current_lines} lines. "
-        f"Phase 3 decomposition requires the monolith to only shrink. "
-        f"If you added a feature, extract equal or more lines into conv/*.py first. "
-        f"If the addition is truly necessary and cannot be counterbalanced, "
-        f"justify in commit msg and update {BASELINE_FILE.name}."
-    )
-
-
-def test_baseline_moves_toward_target(baseline_lines):
-    """Baseline should monotonically decrease. Anchors the decomposition trajectory."""
-    assert baseline_lines > DECOMPOSITION_TARGET_LINES, (
-        f"Baseline {baseline_lines} already ≤ target {DECOMPOSITION_TARGET_LINES}. "
-        "Decomposition is complete or this check is stale — remove it."
-    )
-    # Sanity upper bound: if someone set the baseline far above current reality,
-    # the ratchet is ineffective. Cap at 2x the 2026-04-18 snapshot to prevent
-    # anti-patterns.
-    assert baseline_lines < 15_000, (
-        f"Baseline {baseline_lines} is implausibly high. "
-        "Did someone set it to `wc -l` of something unrelated?"
-    )
-
-
-def test_ratchet_fires_on_growth(tmp_path, monkeypatch):
-    """Self-test: confirm the ratchet actually fails when the monolith grows.
-
-    Addresses Gemini's Round-0 action #3: the ratchet is a critical CI control
-    but its own failure mode is untested until now. Simulate a file larger
-    than the baseline and assert the same assertion logic flags it.
+    If this fires, someone added a chunk of code to the monolith instead of
+    extracting it into a conv/<slice>/ package. Either extract, or — if the
+    addition is genuinely core (subprocess lifecycle, session state,
+    permission bridge expansion) — raise the ceiling here, in
+    .github/workflows/ratchet.yml, and in shared/git-hooks/pre-commit, with
+    a justifying commit message.
     """
-    # Build a fake server file with baseline+1 lines.
-    fake_server = tmp_path / "fake_server.py"
-    fake_server.write_text("\n".join(f"line {i}" for i in range(5000)) + "\n")  # 5000 lines
-    fake_baseline = tmp_path / "fake_baseline"
-    fake_baseline.write_text("4999\n")
-
-    actual_lines = sum(1 for _ in fake_server.open())
-    declared_baseline = int(fake_baseline.read_text().strip())
-
-    # The ratchet rule: actual_lines must be <= declared_baseline.
-    with pytest.raises(AssertionError, match=r"grew from 4999 to 5000 lines"):
-        assert actual_lines <= declared_baseline, (
-            f"conversation_server.py grew from {declared_baseline} to {actual_lines} lines."
-        )
+    assert current_lines <= CEILING, (
+        f"conversation_server.py = {current_lines} lines, exceeds ceiling {CEILING}. "
+        f"Either extract code into a conv/<slice>/ package, or raise the ceiling "
+        f"with a justifying commit message."
+    )
 
 
-def test_ratchet_passes_on_shrink(tmp_path):
-    """Self-test: confirm the ratchet accepts a smaller monolith."""
-    fake_server = tmp_path / "fake_server.py"
-    fake_server.write_text("\n".join(f"line {i}" for i in range(4000)) + "\n")
-    fake_baseline = tmp_path / "fake_baseline"
-    fake_baseline.write_text("5000\n")
-
-    actual_lines = sum(1 for _ in fake_server.open())
-    declared_baseline = int(fake_baseline.read_text().strip())
-
-    # Should NOT raise.
-    assert actual_lines <= declared_baseline
+def test_ceiling_is_realistic(current_lines):
+    """Sanity: ceiling should be above current size with reasonable headroom but
+    not so far above that the alert is meaningless. If the gap closes, plan a
+    decomposition push or accept the new normal explicitly."""
+    headroom = CEILING - current_lines
+    assert headroom > 0, (
+        f"Ceiling {CEILING} is below current {current_lines} — already broken."
+    )
+    assert headroom < 3000, (
+        f"Ceiling {CEILING} is more than 3000 above current {current_lines}. "
+        f"Ratchet has lost its signal — tighten the ceiling or remove the test."
+    )

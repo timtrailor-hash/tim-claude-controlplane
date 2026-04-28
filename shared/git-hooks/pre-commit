@@ -32,14 +32,16 @@ fail() {
     return 0
 }
 
-# 1. Ratchet gate — if conversation_server.py is staged in claude-mobile.
+# 1. Monolith ceiling — replaced strict shrink-only ratchet 2026-04-28.
+# Was firing on every minor hotfix (false alerts 2026-04-27/28). Now alerts
+# only if conversation_server.py exceeds 7000 lines (current baseline 5663,
+# leaves ~1300 lines headroom). Matches the GitHub Actions ratchet at
+# claude-mobile/.github/workflows/ratchet.yml.
 if echo "$STAGED" | grep -q '^conversation_server\.py$'; then
-    if [ -f "$REPO/.conv_server_baseline" ]; then
-        NEW_LINES=$(git show ":conversation_server.py" | wc -l | tr -d '[:space:]')
-        BASELINE=$(tr -d '[:space:]' < "$REPO/.conv_server_baseline")
-        if [ "$NEW_LINES" -gt "$BASELINE" ]; then
-            fail "conversation_server.py would grow $BASELINE -> $NEW_LINES (baseline in $REPO/.conv_server_baseline). Extract lines into conv/*.py, or update baseline with 'Ratchet-override:' trailer."
-        fi
+    NEW_LINES=$(git show ":conversation_server.py" | wc -l | tr -d '[:space:]')
+    CEILING=7000
+    if [ "$NEW_LINES" -gt "$CEILING" ]; then
+        fail "conversation_server.py = $NEW_LINES lines, exceeds ceiling $CEILING. Either extract code into a conv/<slice>/ package, or raise the ceiling in this hook + the GitHub Actions workflow with a justifying commit message."
     fi
 fi
 

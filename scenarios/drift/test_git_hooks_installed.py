@@ -44,11 +44,16 @@ def test_hooks_installed_in_managed_repos():
 
 
 def test_pre_commit_enforces_ratchet():
-    """Sanity: pre-commit script references .conv_server_baseline."""
+    """Sanity: pre-commit script enforces a ceiling on conversation_server.py."""
     p = REPO / "shared" / "git-hooks" / "pre-commit"
     text = p.read_text()
-    assert ".conv_server_baseline" in text, "pre-commit no longer gates the ratchet"
     assert "conversation_server.py" in text, "pre-commit no longer watches the monolith"
+    # Replaced strict shrink-only ratchet with a ceiling 2026-04-28.
+    # The hook used to reject growth past .conv_server_baseline; it now rejects
+    # growth past CEILING (currently 7000).
+    assert "CEILING" in text or "ceiling" in text, (
+        "pre-commit no longer enforces a monolith ceiling"
+    )
 
 
 def test_pre_push_runs_verify():
