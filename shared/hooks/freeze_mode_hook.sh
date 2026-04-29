@@ -40,43 +40,39 @@ if [ -z "$CONFIG" ]; then
     exit 2
 fi
 
-DECISION=$(python3 -c "
-import sys, yaml, os
+# Resolve symlinks for macOS (/tmp → /private/tmp)
+REAL_PATH=$(python3 -c "import os; print(os.path.realpath('$FILE_PATH'))" 2>/dev/null || echo "$FILE_PATH")
 
-config_path = '$CONFIG'
-raw_path = '$FILE_PATH'
-real_path = os.path.realpath(raw_path)
-candidates = {raw_path, real_path}
+# Parse YAML with grep (avoids PyYAML dependency)
+check_path_list() {
+    local section="$1"
+    local in_section=0
+    while IFS= read -r line; do
+        case "$line" in
+            "${section}:"*) in_section=1; continue ;;
+            *:) in_section=0; continue ;;
+        esac
+        if [ "$in_section" = "1" ]; then
+            local path_entry
+            path_entry=$(echo "$line" | sed -n 's/^[[:space:]]*-[[:space:]]*//p')
+            [ -z "$path_entry" ] && continue
+            if [[ "$FILE_PATH" == "$path_entry"* ]] || [[ "$REAL_PATH" == "$path_entry"* ]]; then
+                return 0
+            fi
+        fi
+    done < "$CONFIG"
+    return 1
+}
 
-with open(config_path) as f:
-    cfg = yaml.safe_load(f)
+if check_path_list "forbidden_paths"; then
+    echo "[freeze_mode] BLOCKED: '$FILE_PATH' is in the forbidden list. Autonomous mode cannot write here." >&2
+    exit 2
+fi
 
-forbidden = cfg.get('forbidden_paths', [])
-for fp in forbidden:
-    if any(c.startswith(fp) for c in candidates):
-        print('FORBIDDEN')
-        sys.exit(0)
+if check_path_list "allowed_paths"; then
+    exit 0
+fi
 
-allowed = cfg.get('allowed_paths', [])
-for ap in allowed:
-    if any(c.startswith(ap) for c in candidates):
-        print('ALLOWED')
-        sys.exit(0)
-
-print('DENIED')
-" 2>/dev/null)
-
-case "$DECISION" in
-    ALLOWED)
-        exit 0
-        ;;
-    FORBIDDEN)
-        echo "[freeze_mode] BLOCKED: '$FILE_PATH' is in the forbidden list. Autonomous mode cannot write here." >&2
-        exit 2
-        ;;
-    *)
-        echo "[freeze_mode] BLOCKED: '$FILE_PATH' is outside the allowed subtree for autonomous mode." >&2
-        echo "Allowed paths are defined in $CONFIG" >&2
-        exit 2
-        ;;
-esac
+echo "[freeze_mode] BLOCKED: '$FILE_PATH' is outside the allowed subtree for autonomous mode." >&2
+echo "Allowed paths are defined in $CONFIG" >&2
+exit 2
