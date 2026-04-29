@@ -1,0 +1,14 @@
+# freeze_mode_allowed.yaml — paths writable during autonomous mode
+#
+# When /tmp/autonomous_task_active exists, Write/Edit operations
+# are restricted to these paths only. Everything else is denied.
+
+allowed_paths:
+  - /Users/timtrailor/code/tim-claude-controlplane/
+  - /Users/timtrailor/code/mac-mini-infra/
+  - /Users/timtrailor/code/claude-mobile/
+  - /Users/timtrailor/.claude/projects/
+  - /tmp/
+
+forbidden_paths:
+  - /Users/timtrailor/code/ClaudeCode/
