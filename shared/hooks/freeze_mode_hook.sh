@@ -44,20 +44,22 @@ DECISION=$(python3 -c "
 import sys, yaml, os
 
 config_path = '$CONFIG'
-file_path = os.path.realpath('$FILE_PATH')
+raw_path = '$FILE_PATH'
+real_path = os.path.realpath(raw_path)
+candidates = {raw_path, real_path}
 
 with open(config_path) as f:
     cfg = yaml.safe_load(f)
 
 forbidden = cfg.get('forbidden_paths', [])
 for fp in forbidden:
-    if file_path.startswith(fp):
+    if any(c.startswith(fp) for c in candidates):
         print('FORBIDDEN')
         sys.exit(0)
 
 allowed = cfg.get('allowed_paths', [])
 for ap in allowed:
-    if file_path.startswith(ap):
+    if any(c.startswith(ap) for c in candidates):
         print('ALLOWED')
         sys.exit(0)
 
