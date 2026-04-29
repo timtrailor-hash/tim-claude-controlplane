@@ -7,9 +7,11 @@
 
 ## Public GitHub Repos
 - `timtrailor-hash/sv08-print-tools` — speed tools ONLY
-- `timtrailor-hash/ClaudeCode` — native iOS app (NO hardcoded IPs or secrets)
 - `timtrailor-hash/claude-mobile` — conversation server (credentials.py gitignored)
 - `timtrailor-hash/castle-ofsted-agent` — governors Streamlit app
+- `timtrailor-hash/TerminalApp` — native SSH terminal iOS app (NO hardcoded IPs or secrets)
+- `timtrailor-hash/GovernorsApp` — governors iOS app (NO hardcoded IPs or secrets)
+- `timtrailor-hash/ClaudeCode` — DEAD as of 2026-04-11. Repo retained for archive. Hard rule: do not push or update. See feedback_claudecode_deprecated.md.
 
 ## API Key Rules
 - Use `shared_utils.env_for_claude_cli()` when spawning Claude CLI — strips API key, forces subscription auth
