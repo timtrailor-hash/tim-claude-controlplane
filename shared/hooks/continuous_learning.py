@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+"""continuous_learning.py — Stop hook helper that proposes memory updates.
+
+Reads the just-completed session transcript, sends it to Haiku 4.5 with
+prompt caching, and writes proposed diffs to _pending_review.md.
+"""
+
+import json
+import os
+import sys
+import glob
+from datetime import datetime
+from pathlib import Path
+
+MEMORY_DIR = None
+for candidate in [
+    Path.home() / ".claude/projects/-Users-timtrailor-code/memory",
+    Path.home() / ".claude/projects/-Users-timtrailor-Documents-Claude-code/memory",
+]:
+    if candidate.is_dir():
+        MEMORY_DIR = candidate
+        break
+
+if not MEMORY_DIR:
+    sys.exit(0)
+
+PENDING_FILE = MEMORY_DIR / "_pending_review.md"
+
+
+def find_latest_transcript() -> str | None:
+    patterns = [
+        str(Path.home() / ".claude/projects/-Users-timtrailor-code/*.jsonl"),
+        str(Path.home() / ".claude/projects/-Users-timtrailor-Documents-Claude-code/*.jsonl"),
+    ]
+    all_files = []
+    for pat in patterns:
+        all_files.extend(glob.glob(pat))
+    if not all_files:
+        return None
+    latest = max(all_files, key=os.path.getmtime)
+    return latest
+
+
+def extract_conversation(path: str, max_lines: int = 200) -> str:
+    lines = []
+    try:
+        with open(path) as f:
+            for line in f:
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                role = entry.get("role", "")
+                if role not in ("user", "assistant"):
+                    continue
+                text = ""
+                message = entry.get("message", entry)
+                if isinstance(message, dict):
+                    content = message.get("content", "")
+                    if isinstance(content, str):
+                        text = content
+                    elif isinstance(content, list):
+                        text = " ".join(
+                            block.get("text", "")
+                            for block in content
+                            if isinstance(block, dict) and block.get("type") == "text"
+                        )
+                if text.strip():
+                    lines.append(f"{role.upper()}: {text[:500]}")
+                if len(lines) >= max_lines:
+                    break
+    except Exception:
+        return ""
+    return "\n\n".join(lines)
+
+
+def get_existing_topics() -> str:
+    topics_dir = MEMORY_DIR / "topics"
+    if not topics_dir.is_dir():
+        return ""
+    summaries = []
+    for f in sorted(topics_dir.iterdir()):
+        if f.suffix == ".md" and not f.name.startswith("_"):
+            summaries.append(f"- {f.name}")
+    return "\n".join(summaries[:50])
+
+
+def call_haiku(transcript: str, existing_topics: str) -> str:
+    try:
+        import anthropic
+    except ImportError:
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            creds_path = Path.home() / "code/credentials.py"
+            if creds_path.exists():
+                ns = {}
+                exec(creds_path.read_text(), ns)
+                api_key = ns.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return ""
+        os.environ["ANTHROPIC_API_KEY"] = api_key
+        import anthropic
+
+    client = anthropic.Anthropic()
+
+    system_prompt = f"""You are a memory maintenance assistant. You read Claude Code session transcripts and propose updates to memory files.
+
+Existing memory topic files:
+{existing_topics}
+
+Rules:
+1. Only propose updates for genuinely new information — corrections, new preferences, new infrastructure facts, new feedback patterns.
+2. Do NOT propose updates for: ephemeral task details, debugging steps, code that is in git, things already documented.
+3. Each proposal must include: target file, what to add/change, rationale, and a direct quote from the transcript that supports it.
+4. Format each proposal as a markdown section with clear headers.
+5. Be conservative — fewer high-quality proposals are better than many weak ones.
+6. Maximum 5 proposals per session."""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=2000,
+        system=[
+            {
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[
+            {
+                "role": "user",
+                "content": f"Here is the session transcript to review:\n\n{transcript[:8000]}\n\nPropose memory updates based on this session. If nothing worth remembering happened, say 'No updates needed.' and explain briefly why.",
+            }
+        ],
+    )
+    return response.content[0].text if response.content else ""
+
+
+def write_pending(proposals: str, transcript_path: str):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    session_file = Path(transcript_path).name
+
+    header = f"""## Pending Memory Review — {timestamp}
+
+Source: `{session_file}`
+Generated by: continuous_learning.py (Haiku 4.5)
+Action: Review each proposal below. Accept by applying the diff, reject by deleting the section.
+
+---
+
+"""
+    existing = ""
+    if PENDING_FILE.exists():
+        existing = PENDING_FILE.read_text()
+        if len(existing) > 20000:
+            existing = existing[:20000] + "\n\n[... truncated older proposals ...]\n"
+
+    PENDING_FILE.write_text(header + proposals + "\n\n---\n\n" + existing)
+
+
+def main():
+    transcript_path = find_latest_transcript()
+    if not transcript_path:
+        return
+
+    transcript = extract_conversation(transcript_path)
+    if len(transcript) < 200:
+        return
+
+    existing_topics = get_existing_topics()
+    proposals = call_haiku(transcript, existing_topics)
+
+    if not proposals or "no updates needed" in proposals.lower():
+        return
+
+    write_pending(proposals, transcript_path)
+
+
+if __name__ == "__main__":
+    main()
