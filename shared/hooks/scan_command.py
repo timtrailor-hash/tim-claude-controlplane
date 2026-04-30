@@ -36,6 +36,15 @@ RAW = sys.stdin.read()
 #
 # UNQUOTED heredocs (`<<EOF` and `<<-EOF`) are NOT stripped — their bodies
 # CAN contain executable substitutions, so bashlex must see them.
+#
+# Known residual false-positive case: an UNQUOTED heredoc whose body
+# contains a dangerous-verb plaintext (no actual `$(...)` substitution) WILL
+# surface that plaintext in the scan and may trip a pattern check. This is
+# a deliberate trade-off — we cannot statically tell whether an unquoted
+# heredoc body is "data Tim wrote about a verb" or "code that the shell
+# will expand." The Pattern-28 fix protects QUOTED heredocs (the common
+# case in commit message bodies); the unquoted form remains a paraphrase
+# situation. See lessons.md Pattern 28.
 _QUOTED_HEREDOC = re.compile(
     r"""
     (<<-?\s*)              # opening redirect, possibly tab-strip variant (`<<-`)
