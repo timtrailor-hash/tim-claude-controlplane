@@ -115,32 +115,59 @@ DEFERRAL_RE = re.compile(
 
 
 def load_last_assistant_text(transcript_path: str) -> str:
-    """Return concatenated text of the most recent assistant message."""
+    """Return concatenated text of every assistant block since the most
+    recent user turn. Tool-use turns split assistant text across multiple
+    JSONL entries (preamble → tool_use → tool_result → final text). Walking
+    only contiguous trailing assistant entries misses the preamble — a
+    violation in "I'll wrap this up in 30 minutes" before a tool call would
+    not be caught. Collecting from the last user turn forward catches every
+    assistant block in the current turn."""
     path = Path(transcript_path)
     if not path.is_file():
         return ""
-    last_assistant_text: list[str] = []
     try:
         with path.open() as fh:
             entries = [json.loads(line) for line in fh if line.strip()]
     except Exception:
         return ""
-    # Walk from the end for the most recent assistant turn. A turn may have
-    # multiple text blocks; collect contiguous trailing assistant entries.
-    for entry in reversed(entries):
+
+    # Find the index of the most recent REAL user turn. tool_result entries
+    # are also stored with `type: user` in the JSONL; we must skip those —
+    # otherwise the assistant preamble before a tool call gets cut off.
+    # A real user turn has a text content block (or a plain string content);
+    # a tool_result entry has only `tool_result` blocks.
+    def _is_real_user_entry(entry: dict) -> bool:
+        if entry.get("type") != "user":
+            return False
+        content = entry.get("message", {}).get("content")
+        if isinstance(content, str):
+            return True
+        if not isinstance(content, list):
+            return False
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                return True
+        return False
+
+    last_user_idx = -1
+    for i in range(len(entries) - 1, -1, -1):
+        if _is_real_user_entry(entries[i]):
+            last_user_idx = i
+            break
+
+    texts: list[str] = []
+    for entry in entries[last_user_idx + 1:]:
         if entry.get("type") != "assistant":
-            if last_assistant_text:
-                break
             continue
         msg = entry.get("message", {}) or {}
         content = msg.get("content", [])
         if isinstance(content, str):
-            last_assistant_text.insert(0, content)
+            texts.append(content)
             continue
         for block in content or []:
             if isinstance(block, dict) and block.get("type") == "text":
-                last_assistant_text.insert(0, block.get("text", ""))
-    return "\n".join(last_assistant_text)
+                texts.append(block.get("text", ""))
+    return "\n".join(texts)
 
 
 def find_violations(text: str) -> list[str]:

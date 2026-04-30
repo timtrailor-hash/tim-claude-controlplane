@@ -77,6 +77,12 @@ if echo "$SCAN" | grep -qE '(Library/LaunchAgents|Library/LaunchDaemons)'; then
         if echo "$SCAN" | grep -qE 'find\s.*(-delete|-exec\s+rm)'; then
             ask "find ... -delete / -exec rm on LaunchAgent path. Approve to proceed."
         fi
+        # Defence-in-depth: a chained `cat ... && launchctl kickstart` would
+        # otherwise exit 0 here without ever reaching Pattern 2. Check for
+        # state-changing launchctl verbs in the pipeline before allowing.
+        if echo "$SCAN" | grep -qE 'launchctl\s+(bootstrap|bootout|kickstart|load|unload|enable|disable|setenv|unsetenv)'; then
+            ask "launchctl state-changing command in pipeline alongside LaunchAgent path read. Approve to proceed."
+        fi
         exit 0
     fi
     # launchctl print/list anywhere in the pipeline is read-only even if
@@ -88,8 +94,12 @@ if echo "$SCAN" | grep -qE '(Library/LaunchAgents|Library/LaunchDaemons)'; then
     ask "Command writes to LaunchAgent/LaunchDaemon plist. Approve to proceed."
 fi
 
-# Pattern 1b: launchctl read-only (list, print) — always allowed
-if echo "$SCAN" | grep -qE 'launchctl\s+(list|print)'; then
+# Pattern 1b: launchctl read-only (list, print) — allowed ONLY when no
+# state-changing verb appears anywhere in the pipeline. Without this guard,
+# `launchctl list && launchctl kickstart -k foo` would exit 0 here before
+# Pattern 2 ever runs.
+if echo "$SCAN" | grep -qE 'launchctl\s+(list|print)' && \
+   ! echo "$SCAN" | grep -qE 'launchctl\s+(bootstrap|bootout|kickstart|load|unload|enable|disable|setenv|unsetenv)'; then
     exit 0
 fi
 
