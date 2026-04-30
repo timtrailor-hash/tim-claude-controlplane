@@ -66,7 +66,10 @@ class TestConversationServerCanonicity:
         assert CANONICAL_PATH.exists(), \
             f"Canonical conversation_server.py missing at {CANONICAL_PATH}"
         size = CANONICAL_PATH.stat().st_size
-        assert size > 200_000, \
+        # Threshold lowered 2026-04-30 from 200_000 → 100_000 after the planned
+        # 14-slice decomposition shrunk conversation_server.py from ~7350 lines
+        # to ~4099 lines. Update if a further planned reduction crosses below.
+        assert size > 100_000, \
             f"Canonical file is suspiciously small ({size} bytes) — possible rollback?"
 
     def test_no_runtime_duplicates_exist(self):
