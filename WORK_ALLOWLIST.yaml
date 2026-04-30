@@ -1,0 +1,147 @@
+# WORK_ALLOWLIST.yaml — what work-side Claude (Copilot CLI on the work laptop)
+# is permitted to read from the tim-claude-controlplane repo.
+#
+# Policy: deny-by-default. Only paths listed under `allow:` are visible to the
+# work side. Anything outside `shared/` is implicitly denied.
+#
+# Why this exists:
+#   - Source: memory/topics/work-claude-integration.md (Step 1).
+#   - The work side gets shared rules, generic agents, and review/second-opinion
+#     skills. It must NEVER see printer code, infrastructure topology, Mac Mini
+#     paths, governors data, autofaizal/Funding-Circle pipelines, or anything
+#     that touches local creds, daemons, or the home network.
+#   - Directory split into shared/ vs personal/ is deferred to a later polish.
+#     For now this manifest enumerates per-file what the work side may read.
+#
+# Enforcement:
+#   - v1 (today): manifest only. Audited at deploy time during step 6/7 when
+#     the work-side helper is wired up.
+#   - v2 (later): used by a sync script that materialises a work-side checkout
+#     containing exclusively the listed files.
+#
+# How to update:
+#   1. Decide the file is genuinely generic (no IPs, no paths under
+#      ~/code/ or ~/Documents/, no printer/governors/family content, no
+#      Mac-Mini-only daemons or LaunchAgent references).
+#   2. Add it under the appropriate `allow:` group with a one-line reason.
+#   3. PR through /review like any other change.
+
+policy_version: 1
+last_updated: "2026-04-30"
+default: deny
+
+# Files the work side may read. Globs not supported in v1 — list every file
+# explicitly so adding a new file under e.g. shared/skills/ requires an
+# affirmative allowlist edit.
+allow:
+  rules:
+    - path: shared/rules/security.md
+      reason: API-key handling, repo hygiene rules, auth-helper backup pattern. Generic.
+
+  agents:
+    - path: shared/agents/silent-failure-hunter.md
+      reason: Generic silent-failure scanner. Body has one `~/code/` search-heuristic and a printer §6 sub-section — both are behavioural hints the agent uses, not capability or topology disclosures. Acceptable. Sanitise (drop printer §6) during directory split.
+
+  skills:
+    - path: shared/skills/review/SKILL.md
+      reason: /review pipeline (ruff + semgrep + reviewer subagents + auto-merge). Repo-agnostic logic. References `~/.claude/hooks/sensitivity_check.sh` — work side will ship its own stub or no-op when the work-side helper is wired up in step 7.
+
+# Explicit deny list — not required (default is deny) but documented here so
+# the reasoning behind sensitive-but-tempting paths is captured. If a future
+# edit moves one of these to allow:, the diff makes the policy change visible.
+deny_explicit:
+  - path: shared/rules/operational.md
+    reason: Body's "Before Saying I Can't" checklist contains an imperative `ssh timtrailor@100.126.253.40` step. Work-Claude reading this rule would attempt outbound SSH to the home Tailscale IP from the corporate laptop — leaks topology, may trip DLP/EDR, violates the no-Mac-Mini-control anti-goal. Defer until directory split produces a sanitised work-operational.md without the SSH escape-hatch. (review/SKILL.md already covers the autonomous-merge / plan-mode rules the work side actually needs.)
+  - path: shared/rules/printer-safety.md
+    reason: Printer command allowlist + hardware safety. Personal-only.
+  - path: shared/rules/infrastructure.md
+    reason: Tailscale IPs, Mac Mini hostnames, ~/code/ vs ~/Documents/Claude code/ paths. Topology.
+  - path: shared/policies/
+    reason: printer_policy.yaml (printer IPs/macros) + degraded_modes.yaml (home-network state machine).
+  - path: shared/config/printer_config.toml
+    reason: Printer config.
+  - path: shared/hooks/
+    reason: All hooks are Mac-Mini-resident daemons or memory/printer-bound. None are useful on the work laptop and most reference local paths.
+  - path: shared/lib/
+    reason: system_map.py / system_inventory.sh / live_acceptance.sh — home infrastructure introspection.
+  - path: shared/mcp-launchers/
+    reason: Hardcoded ~/code/ paths for local MCP binaries.
+  - path: shared/git-hooks/
+    reason: Pre-commit/pre-push for the personal monorepo (ratchet ceiling, drift detection). Not relevant to work-laptop repos.
+  - path: shared/agents/architect-auditor.md
+    reason: Body hardcodes personal memory paths (`~/.claude/projects/-Users-timtrailor-Documents-Claude-code/...`), LAN SSH (`ssh timtrailor@192.168.0.172`), and personal LaunchAgent inventory. Describes Tim's home infra, not a generic architectural pattern. Work-side equivalent would need to be a fresh file.
+  - path: shared/agents/code-reviewer.md
+    reason: Body names the three personal code-location paths (`~/Documents/Claude code/`, `~/code/`, `~/.local/lib/`) as topology context for the reviewer role, plus references `credentials.py` as a concrete file. Mild leakage but consistent enough to be deferred. Sanitise during directory split, then re-allow.
+  - path: shared/agents/second-opinion.md
+    reason: Imports OpenAI/Gemini keys from `credentials.py` directly (not Keychain). Work side already gets the same dual-model review via the chatgpt + gemini skills, once those are sanitised and shimmed. Defer until the credential-resolution shim exists.
+  - path: shared/skills/chatgpt/SKILL.md
+    reason: "Body inlines a `for cand in (\"~/code\", \"~/Documents/Claude code\"): … from credentials import OPENAI_API_KEY` probe — concrete personal-path code, not just a heuristic. Defer until the work-side credential shim exists (step 3 keychain entry + step 7 helper)."
+  - path: shared/skills/gemini/SKILL.md
+    reason: Same credentials.py probe as chatgpt. Same defer-until-shim disposition.
+  - path: shared/skills/debate/SKILL.md
+    reason: Same credentials.py probe as second-opinion plus a `grep -rl '<surface>' ~/code ~/.claude` instruction that traverses personal directories. Defer until the credential-resolution shim exists and the body is sanitised.
+  - path: shared/skills/screenshot/SKILL.md
+    reason: Hardcodes `/Users/timtrailor/Library/CloudStorage/GoogleDrive-tim.trailor@envisso.com/...` as both the instruction-file path and the output directory. Not usable on the work laptop without rewrite.
+  - path: shared/skills/printer/
+    reason: SV08 Max printer agent.
+  - path: shared/skills/printer-send/
+    reason: G-code choke-point wrapper.
+  - path: shared/skills/audit-daemons/
+    reason: Mac Mini LaunchAgent auditor.
+  - path: shared/skills/compliance/
+    reason: Acceptance-test compliance score for home system.
+  - path: shared/skills/drift-check/
+    reason: Laptop ↔ Mac Mini code drift checker.
+  - path: shared/skills/lessons-check/
+    reason: Pattern-match against lessons.md (printer/daemon-specific incidents).
+  - path: shared/skills/secure-delete/
+    reason: Wipes session artefacts on Mac Mini including topic memory.
+  - path: shared/skills/rotate-token/
+    reason: Token rotation against personal credentials.py / Keychain entries.
+  - path: shared/skills/autonomous/
+    reason: Persistent runner that emails Tim via personal SMTP creds. Personal only in v1; revisit if work needs background tasks.
+  - path: shared/skills/memory/
+    reason: Tied to a personal-side memory backend. Work side runs its own memory; cross-environment memory queries are handled by the bridge layer per the integration plan, not by exposing this skill's body.
+  - path: shared/skills/createoutput/
+    reason: Funding-Circle pipeline output writer. Default deny in v1.
+  - path: shared/skills/autofaizal/
+    reason: Merchant risk model v12 (work-domain but currently runs on Mac Mini). Default deny in v1.
+  - path: shared/skills/superfaizal/
+    reason: Same as autofaizal.
+  - path: shared/skills/merchantriskassessment/
+    reason: Same as autofaizal.
+  - path: shared/skills/markdown/
+    reason: Jina-API markdown fetcher tied to autofaizal pipeline + Drive saving.
+  - path: shared/skills/markdown_modeloptimised/
+    reason: Same.
+  - path: shared/skills/MD2Features/
+    reason: Same.
+  - path: shared/skills/MD2Features_modeloptimised/
+    reason: Same.
+  - path: shared/skills/transactionmetrics/
+    reason: Databricks queries against personal-machine creds.
+  - path: shared/skills/transactionmetrics_modeloptimised/
+    reason: Same.
+  - path: shared/skills/claudedirect2features/
+    reason: Same pipeline family.
+
+  # Repo-level paths outside shared/ — all denied implicitly, listed here for
+  # reviewer clarity.
+  - path: machines/
+    reason: Per-host settings.json + LaunchAgent plists. Topology.
+  - path: hosts/
+    reason: Per-host manifests.
+  - path: scenarios/
+    reason: Acceptance tests pinned to home-system state (printer IPs, daemons).
+  - path: scripts/
+    reason: ios-build-and-install.sh, ci_failure_poller.py — personal infra.
+  - path: docs/
+    reason: ios-build-pipeline + retrospective. Personal infra.
+  - path: deploy.sh
+    reason: Mac Mini deploy script.
+  - path: rollback.sh
+    reason: Same.
+  - path: verify.sh
+    reason: Same.
+  - path: diff-live.sh
+    reason: Same.
