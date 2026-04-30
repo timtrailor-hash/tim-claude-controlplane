@@ -21,7 +21,15 @@ except Exception:
 
 [ -z "$COMMAND" ] && exit 0
 
-if ! echo "$COMMAND" | grep -qE '(^|[^a-z])git commit'; then
+# Pattern-28 fix: scan only the operative shell tokens, not heredoc bodies or
+# -m message values. Otherwise this hook fires on any Bash command that
+# happens to mention "git commit" inside a heredoc/quoted string (e.g. when
+# Claude builds a /tmp file containing review context that documents commit
+# semantics). See lessons.md Pattern 28 + scan_command.py.
+SCAN=$(echo "$COMMAND" | /opt/homebrew/bin/python3.11 /Users/timtrailor/.claude/hooks/scan_command.py 2>/dev/null)
+[ -z "$SCAN" ] && SCAN="$COMMAND"
+
+if ! echo "$SCAN" | grep -qE '(^|[^a-z])git commit'; then
     exit 0
 fi
 
