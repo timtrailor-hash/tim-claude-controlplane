@@ -54,6 +54,39 @@ allow:
     - path: shared/skills/debate/SKILL.md
       reason: Three-way Claude/Gemini/ChatGPT debate. Same shared resolver pattern. The grep-over-~/code/~/.claude scope walk inside debate body still mentions personal paths but works on either side because the directories exist on both.
 
+  work_topics:
+    # Sanitised topic-memory files (slice L1, 2026-05-01). Behavioural feedback
+    # rules and the shared work-bridge phase-2 plan. Frontmatter scope: shared,
+    # no personal IPs/paths/hardware/family/governance refs. work_setup.sh
+    # Section L rsyncs every *.md (except README) into the work-side project
+    # memory/topics/ and triggers a re-index. Per-file enumeration matches the
+    # v1 policy stated at the top of this file: every new file added under
+    # shared/work-topics/ requires its own affirmative allowlist edit.
+    - path: shared/work-topics/README.md
+      reason: Directory README. Documents the sanitisation rules and the sync mechanism. Excluded from rsync to the work side; allowlist entry exists so a /review on the directory does not flag it.
+    - path: shared/work-topics/feedback_no_deferring.md
+      reason: Behavioural rule. No "logged for later" / "TODO" / deferral phrases. Generic.
+    - path: shared/work-topics/feedback_no_time_estimates.md
+      reason: Behavioural rule. No human time-duration estimates for Claude's work. Generic.
+    - path: shared/work-topics/feedback_em_dash_terminal_exempt.md
+      reason: Em-dash rule scoped to external output only. References Tim's two email addresses as the boundary between internal and external. Generic.
+    - path: shared/work-topics/feedback_plain_english.md
+      reason: Plain-English glossary, banned/translated git/oauth/CS vocabulary. Generic.
+    - path: shared/work-topics/feedback_response_structure.md
+      reason: Reply structure (one ask per bullet, max 3 asks per response, headline first). Generic.
+    - path: shared/work-topics/feedback_response_gate.md
+      reason: Response-gate hook rationale. Mentions hook path under shared/hooks/, no personal infra. Generic.
+    - path: shared/work-topics/feedback_verify_before_claiming.md
+      reason: Verify-before-claiming-success rule. Generic.
+    - path: shared/work-topics/feedback_read_before_overwrite.md
+      reason: Don't full-rewrite shared documents without reading first. Generic.
+    - path: shared/work-topics/feedback_test_before_shipping.md
+      reason: Test-before-shipping rule. Generic.
+    - path: shared/work-topics/feedback_test_before_sharing.md
+      reason: Test-before-sharing-with-Tim rule. Generic.
+    - path: shared/work-topics/work-bridge-phase2-plan.md
+      reason: Shared phase-2 plan (slices A-D); both sides treat as truth. No personal infra refs after sanitisation pass.
+
 # Explicit deny list — not required (default is deny) but documented here so
 # the reasoning behind sensitive-but-tempting paths is captured. If a future
 # edit moves one of these to allow:, the diff makes the policy change visible.
