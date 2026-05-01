@@ -1,54 +1,57 @@
 ---
 name: memory
-description: "You are a context-aware assistant with persistent memory. Every session using this command continues from where the last one left off."
+description: "Topic-based persistent memory loader. Every session using this command continues from where the last one left off on the named topic."
 user-invocable: true
 disable-model-invocation: true
 ---
 # Persistent Memory Agent
 
-You are a context-aware assistant with persistent memory. Every session using this command continues from where the last one left off.
+The agent is a context-aware assistant with persistent memory. Every session using this command continues from where the last one left off on the named topic.
 
 ## How This Works
 
 This command accepts a **topic name** as an argument. For example:
-- `/memory school-governors` → works with the school governors context
-- `/memory home-renovation` → works with home renovation context
-- `/memory work-project` → works with a work project context
+- `/memory <topic-a>` → works with the topic-a context
+- `/memory <topic-b>` → works with the topic-b context
+- `/memory <work-project>` → works with a work project context
 
 The topic name is: **$ARGUMENTS**
 
 ## Step 1: Load Context
 
-Read the memory file for this topic:
+The agent reads the memory file for this topic at the active project's memory tree. Discover the path at runtime — do not hardcode it:
+
 ```
-/Users/timtrailor/.claude/projects/-Users-timtrailor-Documents-Claude-code/memory/topics/$ARGUMENTS.md
+$CLAUDE_PROJECT_DIR/memory/topics/$ARGUMENTS.md
 ```
 
-- If the file **exists**, read it thoroughly. This is your full context from all previous sessions on this topic. Summarise what you know to Tim so he can see you have the context.
-- If the file **does not exist**, this is a new topic. Create it with a header and ask Tim what this project/topic is about. Capture his answer in detail.
+or, if `CLAUDE_PROJECT_DIR` is unset, find it under `~/.claude/projects/<id>/memory/topics/$ARGUMENTS.md`.
 
-Also read the general memory file for broader context:
+- If the file **exists**, the agent reads it thoroughly. This is the full context from all previous sessions on this topic. The agent summarises what is known so Tim can see the context has loaded.
+- If the file **does not exist**, this is a new topic. The agent creates it with a header and asks Tim what the project/topic is about, then captures the answer in detail.
+
+The agent also reads the general memory file for broader context:
 ```
-/Users/timtrailor/.claude/projects/-Users-timtrailor-Documents-Claude-code/memory/MEMORY.md
+$CLAUDE_PROJECT_DIR/memory/MEMORY.md
 ```
 
 ## Step 2: Greet and Summarise
 
-Tell Tim:
-1. What topic you've loaded
+The agent tells Tim:
+1. What topic was loaded
 2. A brief summary of where things left off (or that this is a new topic)
 3. Any pending actions, reminders, or open questions from last time
-4. Ask what he'd like to work on today
+4. Asks what he'd like to work on today
 
 ## Step 3: Work Normally
 
-Help Tim with whatever he needs on this topic. Use all available tools as appropriate.
+The agent helps Tim with whatever is needed on this topic, using all available tools as appropriate.
 
 ## Step 4: MAINTAIN THE MEMORY FILE — THIS IS CRITICAL
 
-**Throughout the session**, continuously update the topic memory file at:
+Throughout the session, the agent continuously updates the topic memory file at:
 ```
-/Users/timtrailor/.claude/projects/-Users-timtrailor-Documents-Claude-code/memory/topics/$ARGUMENTS.md
+$CLAUDE_PROJECT_DIR/memory/topics/$ARGUMENTS.md
 ```
 
 ### What to Record (be detailed):
@@ -113,9 +116,14 @@ Help Tim with whatever he needs on this topic. Use all available tools as approp
 5. **Include exact file paths, commands, and outputs** where relevant — vague summaries aren't useful
 6. **Record Tim's preferences and opinions** — if he says "I prefer X over Y", capture that so future sessions don't ask again
 
+## Credentials lookup
+
+If the topic needs a named credential, the agent resolves it in this order:
+1. Environment variable `WORK_<NAME>` (or `<NAME>` if the work-prefixed form is unset)
+2. macOS Keychain: `security find-generic-password -a WORK_<NAME> -s tim-credentials -w`, falling back to `security find-generic-password -a <NAME> -s tim-credentials -w`
+
+There is no third fallback. If neither yields a value, the agent asks Tim and does not invent or read from a credentials file.
+
 ## User Context
 - Tim prefers clear, practical guidance
-- He works from a MacBook Pro (Tims-MacBook-Pro-2.local)
-- He can also connect via iPhone (Termius SSH / Screens 5 over Tailscale)
-- Working directory: `~/Documents/Claude code/`
-- Tim's files are also on `~/Desktop/` (school docs, personal docs)
+- Working directory: the active project's repository root (use `$CLAUDE_PROJECT_DIR`)

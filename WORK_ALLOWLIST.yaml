@@ -59,6 +59,14 @@ allow:
       reason: Independent Gemini reviewer. Same env/Keychain/credentials.py resolver as chatgpt; uses GEMINI_API_KEY accounts.
     - path: shared/skills/debate/SKILL.md
       reason: Three-way Claude/Gemini/ChatGPT debate. Same shared resolver pattern. The grep-over-~/code/~/.claude scope walk inside debate body still mentions personal paths but works on either side because the directories exist on both.
+    - path: shared/skills/compliance/SKILL.md
+      reason: "Slice I 2026-05-01: SSH-to-Mac-Mini step removed; reads /tmp/acceptance_results.json + acceptance_tests.py in project root. Generic on both sides."
+    - path: shared/skills/lessons-check/SKILL.md
+      reason: "Slice I 2026-05-01: lessons.md path discovered at runtime via $CLAUDE_PROJECT_DIR; pattern table generalised. Works on both sides without hardcoded paths."
+    - path: shared/skills/memory/SKILL.md
+      reason: "Slice I 2026-05-01: topic name as $ARGUMENTS, $CLAUDE_PROJECT_DIR-discovered memory tree, env→Keychain credentials lookup. Works on both sides."
+    - path: shared/skills/secure-delete/SKILL.md
+      reason: "Slice I 2026-05-01: ChromaDB data dir resolved at runtime in env→work_memory_data→personal-side-defaults order. Works on both sides without regression."
 
   work_topics:
     # Sanitised topic-memory files (slice L1, 2026-05-01). Behavioural feedback
