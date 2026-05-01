@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3
 """scan_command.py — bashlex-based command normaliser for protected_path_hook.
 
 Reads a Bash command on stdin, prints a "scan string" on stdout that contains

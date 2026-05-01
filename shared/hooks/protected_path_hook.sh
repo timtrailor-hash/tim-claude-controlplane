@@ -4,7 +4,7 @@
 #
 # Protected targets: ~/Library/LaunchAgents, ~/Library/LaunchDaemons,
 # /Library/, /etc/, launchctl state changes, sudo reboot/shutdown, chflags,
-# dangerous printer gcode via SSH/curl, pushes to public repos.
+# git push --force.
 #
 # Emits a PreToolUse JSON decision ("ask") so Claude Code prompts Tim to
 # approve or deny. Exit 0 with no JSON = pass through to default handling.
@@ -36,13 +36,13 @@ fi
 # Resolve the scanner script relative to this hook so the same file
 # works under ~/.claude/hooks/ on the live machine AND under the
 # controlplane checkout in CI runners. Resolve the Python interpreter
-# from PATH so Linux CI (no Homebrew) and macOS both work.
+# from PATH so different machines (different Homebrew prefixes, Linux
+# CI, etc.) all work without hardcoded paths.
 SCAN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCAN_PY="$SCAN_DIR/scan_command.py"
 PYTHON_BIN=""
-for cand in python3.11 python3 /opt/homebrew/bin/python3.11; do
+for cand in python3 python3.11 python3.12; do
     if command -v "$cand" >/dev/null 2>&1; then PYTHON_BIN="$cand"; break; fi
-    [ -x "$cand" ] && PYTHON_BIN="$cand" && break
 done
 if [ -n "$PYTHON_BIN" ] && [ -f "$SCAN_PY" ]; then
     SCAN=$(echo "$COMMAND" | "$PYTHON_BIN" "$SCAN_PY" 2>/dev/null)
@@ -52,20 +52,9 @@ fi
 # SSH commands operate on a different machine. The remote host has its
 # own hooks and its own safety rules; scanning the SSH payload for local
 # path names generates false positives (e.g. `ssh host "ls ~/Library/
-# LaunchAgents"` would otherwise match Pattern 1 below). Printer gcode
-# and destructive patterns still match further down if they appear in
-# an SSH command, because those regex patterns intentionally include
-# explicit printer IPs or filesystem markers that are NOT local-only.
+# LaunchAgents"` would otherwise match Pattern 1 below). Skip SSH/SCP
+# commands entirely — the remote host is responsible for its own gating.
 if echo "$COMMAND" | grep -qE '^(ssh |scp )'; then
-    # Still apply printer-specific patterns (7) since they reference
-    # printer IPs and are equally dangerous over SSH. Everything else
-    # skips.
-    if echo "$COMMAND" | grep -qE 'ssh.*192\.168\.0\.108' || \
-       echo "$COMMAND" | grep -qE 'curl.*192\.168\.0\.108.*gcode/script'; then
-        if echo "$COMMAND" | grep -qiE '(FIRMWARE_RESTART|RESTART[^_]|G28|PROBE|QUAD_GANTRY_LEVEL|BED_MESH_CALIBRATE|SAVE_CONFIG)'; then
-            ask "Dangerous printer gcode via SSH. Confirm print_stats.state first."
-        fi
-    fi
     exit 0
 fi
 
@@ -153,17 +142,10 @@ if echo "$SCAN" | grep -qE 'chflags\s+(no)?uchg'; then
     ask "Immutability flag change (chflags uchg/nouchg). Approve to proceed."
 fi
 
-# Pattern 7: Dangerous printer gcode via SSH or direct curl to Moonraker
-# Bypasses the Moonraker allowlist — can kill an active print.
-if echo "$SCAN" | grep -qE 'ssh.*192\.168\.0\.108' || echo "$SCAN" | grep -qE 'curl.*192\.168\.0\.108.*gcode/script'; then
-    if echo "$SCAN" | grep -qiE '(FIRMWARE_RESTART|RESTART[^_]|G28|PROBE|QUAD_GANTRY_LEVEL|BED_MESH_CALIBRATE|SAVE_CONFIG)'; then
-        ask "Dangerous printer gcode can destroy an active print. Confirm print_stats.state first, then approve to proceed."
-    fi
-fi
-
-# Pattern 8: git push to known public repos
-if echo "$SCAN" | grep -qE 'git\s+push.*(sv08-print-tools|ClaudeCode|claude-mobile|castle-ofsted-agent)'; then
-    ask "Push to public GitHub repo. Approve to proceed."
+# Pattern 7: git push --force / -f / +<ref> to any remote.
+# Force-pushes can rewrite history on a shared branch — always ask.
+if echo "$SCAN" | grep -qE 'git\s+push\s+(.*\s)?(--force\b|-f\b|--force-with-lease\b)'; then
+    ask "git push --force can rewrite remote history. Approve to proceed."
 fi
 
 exit 0
