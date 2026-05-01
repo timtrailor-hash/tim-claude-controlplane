@@ -34,12 +34,18 @@ for arg in "$@"; do
     esac
 done
 
-# Detect machine
+# Detect machine. Work laptop is identified by an explicit marker file
+# (~/.claude/.work-laptop) because the corporate hostname is unpredictable.
+# Mac Mini and personal laptop continue to be detected by hostname.
 HOSTNAME_SHORT=$(hostname -s)
-case "$HOSTNAME_SHORT" in
-    *mini*|*Mini*) MACHINE="mac-mini" ;;
-    *)             MACHINE="laptop" ;;
-esac
+if [ -f "$HOME/.claude/.work-laptop" ]; then
+    MACHINE="work-laptop"
+else
+    case "$HOSTNAME_SHORT" in
+        *mini*|*Mini*) MACHINE="mac-mini" ;;
+        *)             MACHINE="laptop" ;;
+    esac
+fi
 MACHINE_DIR="$REPO_DIR/machines/$MACHINE"
 LA_SUBDIR="$HOME/Library/LaunchAgents"
 

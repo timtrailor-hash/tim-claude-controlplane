@@ -1,0 +1,102 @@
+# Work Laptop Service Manifest — single source of truth for persistent processes.
+# Every entry here MUST exist as a LaunchAgent or scheduled job once slice J ships.
+# Anything that runs on the work laptop and is NOT listed here is drift.
+#
+# Why this file exists separately from machines/mac-mini/services.yaml:
+# the work laptop has different responsibilities (corporate code, no printer,
+# no governors), different paths, and different keychain entries (WORK_*).
+# Sanitised, no personal infrastructure.
+
+services:
+  bridge-mcp:
+    purpose: "FastMCP server exposing the three bridge tools (push_notification, send_email_self, search_personal_memory) to the work-side Claude."
+    owner: tools/work_mcp_server.py
+    mode: spawned-by-claude-code   # MCP servers are stdio-spawned per session, not LaunchAgents
+    python: python3
+    code: ~/code/claude-bridge/tools/work_mcp_server.py
+    secrets: [BRIDGE_AGE_PRIVKEY_WORK]
+    failure_mode: "YELLOW — work-side cannot reach personal-side; SSH-style fallback is bridge_send_email_self via the gateway."
+    auto_fix: false
+    notes: "Registered in ~/.claude.json by work_setup.sh Section A."
+
+  memory-work:
+    purpose: "Work-side ChromaDB + FTS5 memory MCP. Reads JSONLs from ~/.claude/projects/."
+    owner: tools/work_memory_server.py
+    mode: spawned-by-claude-code
+    python: python3
+    code: ~/code/claude-bridge/tools/work_memory_server.py
+    secrets: []
+    failure_mode: "YELLOW — work-side memory queries fail; subagents that read lessons.md still work via the local file."
+    auto_fix: false
+    notes: "Registered in ~/.claude.json by work_setup.sh Section B. Re-indexed on SessionEnd via work_memory_index.sh."
+
+  health-check:
+    purpose: "Hourly probe of work-laptop services. Writes /tmp/health_check_results.json consumed by ClaudeControl Health tab."
+    owner: tools/work_health_check.sh
+    mode: launchd-StartInterval-3600
+    python: python3
+    code: ~/code/claude-bridge/tools/work_health_check.sh
+    secrets: []
+    failure_mode: "YELLOW — health dashboard shows stale status only; no operational impact."
+    auto_fix: false
+    notes: "Slice J ships this LaunchAgent + the probe script. Until then, ClaudeControl falls back to per-tool checks."
+
+  ci-failure-poller:
+    purpose: "Hourly poll of GitHub Actions for red builds on work-account repos."
+    owner: tools/work_ci_failure_poller.py
+    mode: launchd-StartInterval-3600
+    python: python3
+    code: ~/code/claude-bridge/tools/work_ci_failure_poller.py
+    secrets: [WORK_GITHUB_TOKEN]
+    failure_mode: "YELLOW — silent CI failures stay silent until next session."
+    auto_fix: false
+    notes: "Slice J + slice K (work GitHub PAT) needed before this is wired live."
+
+  stale-pr-alert:
+    purpose: "Daily check for PRs open >24 h on work-account repos. ntfy / bridge_push to Tim."
+    owner: tools/work_stale_pr_alert.py
+    mode: launchd-StartCalendarInterval-09:00
+    python: python3
+    code: ~/code/claude-bridge/tools/work_stale_pr_alert.py
+    secrets: [WORK_GITHUB_TOKEN]
+    failure_mode: "YELLOW — stale PRs stay stale until Tim notices."
+    auto_fix: false
+    notes: "Slice J + slice K."
+
+  credential-rotation:
+    purpose: "Quarterly rotation reminder for WORK_OPENAI/WORK_GEMINI/WORK_GITHUB. Sends a bridge_push with a checklist."
+    owner: tools/work_credential_rotation.py
+    mode: launchd-StartCalendarInterval-quarterly
+    python: python3
+    code: ~/code/claude-bridge/tools/work_credential_rotation.py
+    secrets: []
+    failure_mode: "GREEN — informational reminder."
+    auto_fix: false
+    notes: "Slice J ships the LaunchAgent + the script."
+
+  memory-indexer:
+    purpose: "6-hourly re-index of new transcripts into the work memory ChromaDB+FTS5."
+    owner: tools/work_memory_index.sh
+    mode: launchd-StartInterval-21600
+    python: python3
+    code: ~/code/claude-bridge/tools/work_memory_index.sh
+    secrets: []
+    failure_mode: "YELLOW — bridge_search_personal_memory and local memory queries return stale results."
+    auto_fix: false
+    notes: "Currently triggered only on SessionEnd by work_setup.sh Section B. Slice J adds the periodic LaunchAgent."
+
+# Items intentionally NOT on this manifest:
+# - printer-snapshots — personal-only, no printer hardware reachable.
+# - governors / governorhub-sync — personal-only, school context.
+# - bgt-date-monitor — personal-only.
+# - autofaizal — runs on personal Mac Mini; work laptop must not.
+# - ttyd-tunnel — corporate firewall blocks ttyd.
+# - streamlit-https — no Streamlit apps on the work side.
+# - conversation-server — personal-only iOS bridge surface (work side uses
+#   the Bridge gateway via GitHub-as-transport instead).
+# - backup-to-drive — slice F, blocked on Tim's work-Google OAuth.
+
+policy:
+  default_failure_mode: YELLOW
+  auto_fix_default: false
+  audit_log: ~/.claude/work_services_audit.log
