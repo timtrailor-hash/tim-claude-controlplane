@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.timtrailor.work-trend-tracker</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>python3</string>
+        <string>/Users/timtrailor/code/claude-bridge/tools/work_trend_tracker.py</string>
+    </array>
+
+    <!-- Hourly: append the latest /tmp/work_health_check_results.json into
+         a 30-day rolling window, detect regressions, alert via bridge_push. -->
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/work_trend_tracker.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/work_trend_tracker.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/timtrailor/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/timtrailor</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/timtrailor/code/claude-bridge</string>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
