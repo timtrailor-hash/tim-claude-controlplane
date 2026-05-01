@@ -42,7 +42,13 @@ allow:
 
   agents:
     - path: shared/agents/silent-failure-hunter.md
-      reason: Generic silent-failure scanner. Body has one `~/code/` search-heuristic and a printer §6 sub-section — both are behavioural hints the agent uses, not capability or topology disclosures. Acceptable. Sanitise (drop printer §6) during directory split.
+      reason: "Slice H 2026-05-01: printer §6 sub-section removed, ntfy/SMTP refs replaced with the project's alert channel, named scripts replaced with generic 'long-running monitor' descriptors. Generic silent-failure scanner."
+    - path: shared/agents/code-reviewer.md
+      reason: "Slice H 2026-05-01: 8-point checklist + Pattern 1 5-question gate, with printer/Klipper specifics generalised to 'external system commands' and three-location code-tree drift replaced with single-canonical-tree guidance. credentials.py reference dropped in favour of the env→Keychain resolver."
+    - path: shared/agents/architect-auditor.md
+      reason: "Slice H 2026-05-01: hardcoded ~/.claude/projects/-Users-timtrailor-* paths and ssh timtrailor@192.168.0.172 removed. References memory/topics under shared/work-topics/. 'If present' tolerance for architecture-plan.md/system-rebuild.md so the work side does not hard-fail on missing files."
+    - path: shared/agents/second-opinion.md
+      reason: "Slice H 2026-05-01: credentials.py disk probe replaced with env→Keychain (WORK_<NAME> first then bare <NAME>) resolver. ask_gemini and ask_chatgpt early-return on missing key. Dual-model parallel threading + cost table + synthesis output format kept."
 
   skills:
     - path: shared/skills/review/SKILL.md
@@ -125,12 +131,10 @@ deny_explicit:
     reason: Hardcoded ~/code/ paths for local MCP binaries.
   - path: shared/git-hooks/
     reason: Pre-commit/pre-push for the personal monorepo (ratchet ceiling, drift detection). Not relevant to work-laptop repos.
-  - path: shared/agents/architect-auditor.md
-    reason: Body hardcodes personal memory paths (`~/.claude/projects/-Users-timtrailor-Documents-Claude-code/...`), LAN SSH (`ssh timtrailor@192.168.0.172`), and personal LaunchAgent inventory. Describes Tim's home infra, not a generic architectural pattern. Work-side equivalent would need to be a fresh file.
-  - path: shared/agents/code-reviewer.md
-    reason: Body names the three personal code-location paths (`~/Documents/Claude code/`, `~/code/`, `~/.local/lib/`) as topology context for the reviewer role, plus references `credentials.py` as a concrete file. Mild leakage but consistent enough to be deferred. Sanitise during directory split, then re-allow.
-  - path: shared/agents/second-opinion.md
-    reason: Imports OpenAI/Gemini keys from `credentials.py` directly (not Keychain). Work side already gets the same dual-model review via the chatgpt + gemini skills, once those are sanitised and shimmed. Defer until the credential-resolution shim exists.
+  # architect-auditor / code-reviewer / second-opinion moved to allow.agents on
+  # 2026-05-01 (slice H): hardcoded personal-side paths and credentials.py disk
+  # probes replaced with controlplane-relative paths and the env→Keychain
+  # resolver. See allow.agents above for the per-file reasons.
   # chatgpt/gemini/debate moved to allow.skills on 2026-05-01 (slice C):
   # the credentials.py probe was replaced with a env → Keychain →
   # credentials.py fallback resolver that works on both sides.
