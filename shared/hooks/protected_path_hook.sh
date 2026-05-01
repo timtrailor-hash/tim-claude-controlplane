@@ -33,7 +33,20 @@ fi
 # contains only operative shell tokens — substitutions inside -m args ARE
 # kept (they execute at parse time), pure data is dropped. On parse failure
 # the script falls back to the raw command (conservative).
-SCAN=$(echo "$COMMAND" | /opt/homebrew/bin/python3.11 /Users/timtrailor/.claude/hooks/scan_command.py 2>/dev/null)
+# Resolve the scanner script relative to this hook so the same file
+# works under ~/.claude/hooks/ on the live machine AND under the
+# controlplane checkout in CI runners. Resolve the Python interpreter
+# from PATH so Linux CI (no Homebrew) and macOS both work.
+SCAN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCAN_PY="$SCAN_DIR/scan_command.py"
+PYTHON_BIN=""
+for cand in python3.11 python3 /opt/homebrew/bin/python3.11; do
+    if command -v "$cand" >/dev/null 2>&1; then PYTHON_BIN="$cand"; break; fi
+    [ -x "$cand" ] && PYTHON_BIN="$cand" && break
+done
+if [ -n "$PYTHON_BIN" ] && [ -f "$SCAN_PY" ]; then
+    SCAN=$(echo "$COMMAND" | "$PYTHON_BIN" "$SCAN_PY" 2>/dev/null)
+fi
 [ -z "$SCAN" ] && SCAN="$COMMAND"
 
 # SSH commands operate on a different machine. The remote host has its
