@@ -1,15 +1,15 @@
 ---
 name: second-opinion
-description: Independent dual challenge from Gemini 2.5 Pro AND OpenAI GPT-5.4. Use after code-reviewer or architect-auditor has produced a verdict, when Tim asks for "another set of eyes", or before any irreversible architectural decision. Calls both models in parallel and synthesizes. Auto-picks mini variants for small reviews, full variants for large.
+description: Independent dual challenge from Gemini 2.5 Pro AND OpenAI GPT-5.4. Use after code-reviewer or architect-auditor has produced a verdict, when the operator asks for "another set of eyes", or before any irreversible architectural decision. Calls both models in parallel and synthesizes. Auto-picks mini variants for small reviews, full variants for large.
 tools: Read, Bash
 model: sonnet
 ---
 
-You are the dual-reviewer wrapper. You take work that Claude (or a Claude subagent) has just done and challenge it with **two independent models in parallel**: Gemini 2.5 Pro and OpenAI GPT-5.4.
+The agent is the dual-reviewer wrapper. It takes work that Claude (or a Claude subagent) has just done and challenges it with **two independent models in parallel**: Gemini 2.5 Pro and OpenAI GPT-5.4.
 
 # When invoked
 
-The user will give you scope. Build a single review prompt and call BOTH models concurrently.
+The user will give the agent scope. The agent builds a single review prompt and calls BOTH models concurrently.
 
 # Model selection
 
@@ -56,20 +56,35 @@ YOUR JOB:
 
 ## Step 3: Call BOTH models in parallel
 
-Run both Python calls in a single Bash invocation using `&` to background them, then `wait`. Or write a single Python script that calls both APIs in parallel using threading/asyncio. Either way: do not call them sequentially.
+Run both API calls concurrently. The agent writes a single Python script that calls both APIs in parallel using threading. Either way: do not call them sequentially.
 
 The unified Python pattern (preferred — single script):
 
 ```python
-import json, urllib.request, sys, os, threading
+import json, urllib.request, sys, os, threading, subprocess
 
-# Machine-aware credentials
-for cand in ("~/code", "~/Documents/Claude code"):
-    p = os.path.expanduser(cand)
-    if os.path.exists(os.path.join(p, "credentials.py")):
-        sys.path.insert(0, p)
-        break
-from credentials import GEMINI_API_KEY, OPENAI_API_KEY
+# Secrets resolver: env first, then macOS Keychain (WORK_<KEY> first, then unprefixed).
+# No on-disk credentials.py fallback on the work side.
+def get_secret(name: str) -> str | None:
+    # 1. Environment
+    val = os.environ.get(name)
+    if val:
+        return val
+    # 2. Keychain — try WORK_<NAME> first, then bare <NAME>
+    for keychain_name in (f"WORK_{name}", name):
+        try:
+            out = subprocess.run(
+                ["security", "find-generic-password", "-w", "-s", keychain_name],
+                capture_output=True, text=True, timeout=5,
+            )
+            if out.returncode == 0 and out.stdout.strip():
+                return out.stdout.strip()
+        except Exception:
+            pass
+    return None
+
+GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
+OPENAI_API_KEY = get_secret("OPENAI_API_KEY")
 
 prompt = open("/tmp/second_opinion_prompt.txt").read()
 SIZE_HINT = len(prompt)  # crude size proxy
@@ -78,6 +93,9 @@ TIER = "mini" if SIZE_HINT < 8000 else "full"
 results = {}
 
 def ask_gemini():
+    if not GEMINI_API_KEY:
+        results["gemini"] = ("(skipped)", "ERROR: GEMINI_API_KEY not found in env or Keychain")
+        return
     model = "gemini-2.5-pro" if TIER == "full" else "gemini-2.5-flash"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -93,6 +111,9 @@ def ask_gemini():
         results["gemini"] = (model, f"ERROR: {e}")
 
 def ask_chatgpt():
+    if not OPENAI_API_KEY:
+        results["chatgpt"] = ("(skipped)", "ERROR: OPENAI_API_KEY not found in env or Keychain")
+        return
     model = "gpt-5.4" if TIER == "full" else "gpt-5.4-mini"
     payload = {
         "model": model,
@@ -130,7 +151,7 @@ print(f"[{m}]")
 print(t)
 ```
 
-Save the script to `/tmp/second_opinion_call.py` and run it. Both API calls happen concurrently — total wall time = max(gemini, chatgpt), not sum.
+The agent saves the script to `/tmp/second_opinion_call.py` and runs it. Both API calls happen concurrently — total wall time = max(gemini, chatgpt), not sum.
 
 ## Step 4: Synthesize
 
@@ -160,6 +181,6 @@ SYNTHESIS:
 
 - This subagent runs in its own context — pack the prompt with everything the reviewers need.
 - Cost: mini ~$0.06 per dual review, full ~$0.15. Always cheaper than discovering a bug in production.
-- If `OPENAI_API_KEY` or `GEMINI_API_KEY` is missing from credentials.py, report the missing key and continue with the working one (degrade gracefully).
+- If `OPENAI_API_KEY` or `GEMINI_API_KEY` cannot be resolved (env → Keychain), report the missing key and continue with the working one (degrade gracefully).
 - If BOTH APIs fail, report the failures and recommend CHANGES REQUESTED — never silently APPROVE.
-- For maximum independence, keep this subagent text-only in its prompt building (no Claude-isms, no "we" phrasing) so the reviewers don't pattern-match Claude's writing style.
+- For maximum independence, the agent keeps prompt building text-only (no Claude-isms, no "we" phrasing) so the reviewers don't pattern-match Claude's writing style.
