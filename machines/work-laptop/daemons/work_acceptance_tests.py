@@ -635,7 +635,18 @@ def t_memory_topics_deployed() -> None:
 
 
 def t_bridge_gateway_health() -> None:
+    """The bridge gateway HTTP server only runs on the personal side. The work
+    laptop reaches the bridge via GitHub-as-transport, NOT via local HTTP, so
+    this probe should not exist on the work side. Skip with a green status
+    that documents the design instead of producing a permanent amber.
+    """
     name = "bridge.gateway.health"
+    if (Path.home() / ".claude" / ".work-laptop").exists():
+        record(name, "bridge", "green",
+               "skipped on work laptop (gateway lives on personal side; "
+               "work-side bridge MCP uses GitHub-as-transport)",
+               "")
+        return
     try:
         with urllib.request.urlopen(BRIDGE_HEALTH_URL, timeout=3) as resp:
             body = resp.read(2048).decode(errors="replace")
@@ -657,16 +668,13 @@ def t_bridge_gateway_health() -> None:
         return
     except urllib.error.URLError as exc:
         reason = getattr(exc, "reason", exc)
-        # ConnectionRefusedError = personal-side gateway not running.
-        # The work-side bridge MCP can still queue requests via GitHub
-        # transport, so this is amber not red.
+        # On the personal side, ConnectionRefusedError = gateway not running.
         if isinstance(reason, ConnectionRefusedError) or "Connection refused" in str(reason):
             record(name, "bridge", "amber",
                    "gateway unreachable (connection refused) — personal side likely down",
                    str(reason))
             return
-        # Other URLError (DNS, TLS, timeout) is more concerning — work
-        # side may be misconfigured. Red.
+        # Other URLError (DNS, TLS, timeout) is more concerning. Red.
         record(name, "bridge", "red",
                f"URLError reaching {BRIDGE_HEALTH_URL}: {reason}",
                str(reason))
