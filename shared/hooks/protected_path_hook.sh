@@ -33,7 +33,20 @@ fi
 # contains only operative shell tokens — substitutions inside -m args ARE
 # kept (they execute at parse time), pure data is dropped. On parse failure
 # the script falls back to the raw command (conservative).
-SCAN=$(echo "$COMMAND" | /opt/homebrew/bin/python3.11 /Users/timtrailor/.claude/hooks/scan_command.py 2>/dev/null)
+# Resolve the scanner script relative to this hook so the same file
+# works under ~/.claude/hooks/ on the live machine AND under the
+# controlplane checkout in CI runners. Resolve the Python interpreter
+# from PATH so Linux CI (no Homebrew) and macOS both work.
+SCAN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCAN_PY="$SCAN_DIR/scan_command.py"
+PYTHON_BIN=""
+for cand in python3.11 python3 /opt/homebrew/bin/python3.11; do
+    if command -v "$cand" >/dev/null 2>&1; then PYTHON_BIN="$cand"; break; fi
+    [ -x "$cand" ] && PYTHON_BIN="$cand" && break
+done
+if [ -n "$PYTHON_BIN" ] && [ -f "$SCAN_PY" ]; then
+    SCAN=$(echo "$COMMAND" | "$PYTHON_BIN" "$SCAN_PY" 2>/dev/null)
+fi
 [ -z "$SCAN" ] && SCAN="$COMMAND"
 
 # SSH commands operate on a different machine. The remote host has its
@@ -69,29 +82,34 @@ print(json.dumps({
     exit 0
 }
 
-# Pattern 1: Commands touching LaunchAgent/LaunchDaemon plist files
-if echo "$SCAN" | grep -qE '(Library/LaunchAgents|Library/LaunchDaemons)'; then
-    # Allow read-only commands straight through. `find` is treated as
-    # read-only if the pipeline doesn't include -delete / -exec rm.
-    if echo "$SCAN" | grep -qE '^(cat |ls |plutil -p |plutil -lint |head |tail |wc |file |stat |md5 |shasum |grep |find )'; then
-        if echo "$SCAN" | grep -qE 'find\s.*(-delete|-exec\s+rm)'; then
-            ask "find ... -delete / -exec rm on LaunchAgent path. Approve to proceed."
-        fi
-        # Defence-in-depth: a chained `cat ... && launchctl kickstart` would
-        # otherwise exit 0 here without ever reaching Pattern 2. Check for
-        # state-changing launchctl verbs in the pipeline before allowing.
-        if echo "$SCAN" | grep -qE 'launchctl\s+(bootstrap|bootout|kickstart|load|unload|enable|disable|setenv|unsetenv)'; then
-            ask "launchctl state-changing command in pipeline alongside LaunchAgent path read. Approve to proceed."
-        fi
-        exit 0
-    fi
-    # launchctl print/list anywhere in the pipeline is read-only even if
-    # the pipeline also touches Library/LaunchAgents (e.g. combined with find).
-    if echo "$SCAN" | grep -qE 'launchctl\s+(list|print)' && \
-       ! echo "$SCAN" | grep -qE 'launchctl\s+(bootstrap|bootout|kickstart|load|unload|enable|disable|setenv|unsetenv)'; then
-        exit 0
-    fi
+# Pattern 1: Commands that WRITE to a LaunchAgent/LaunchDaemon plist.
+#
+# Pattern-28 second-order fix (2026-05-01, lessons.md):
+# `scan_command.py` now emits the `__LA_WRITE__` sentinel ONLY when an
+# operative argument in a write position (cp/mv dest, tee/rm/chmod arg,
+# `>`/`>>` redirect target, etc.) resolves to a path under
+# `Library/LaunchAgents` or `Library/LaunchDaemons`. Read-only commands
+# (cat, ls, diff, head, tail, file, stat, grep) and SOURCE args of
+# cp/mv/rsync/install/ln no longer trigger this pattern, because the
+# substring `Library/LaunchAgents` appearing in a path-arg-as-data was
+# never semantically a "write to LaunchAgents" — it was just data.
+#
+# Anti-pattern this fixes (recorded for future hooks): never match a
+# load-bearing path substring anywhere in a command. Always classify by
+# argument role (write target vs source vs verb) at AST level.
+if echo "$SCAN" | grep -q '__LA_WRITE__'; then
     ask "Command writes to LaunchAgent/LaunchDaemon plist. Approve to proceed."
+fi
+
+# Pattern 1a: defence-in-depth — `find ... -delete` / `find ... -exec rm`
+# on a Library/LaunchAgents path. `find` is not in the write-classification
+# table (its args are search roots, not write targets), so the sentinel
+# won't fire on a benign `find Library/LaunchAgents -name x.plist`. Match
+# the literal pattern only when the find pipeline carries a destructive
+# action.
+if echo "$SCAN" | grep -qE '(Library/LaunchAgents|Library/LaunchDaemons)' && \
+   echo "$SCAN" | grep -qE 'find\s.*(-delete|-exec\s+rm)'; then
+    ask "find ... -delete / -exec rm on LaunchAgent path. Approve to proceed."
 fi
 
 # Pattern 1b: launchctl read-only (list, print) — allowed ONLY when no
@@ -118,8 +136,15 @@ if echo "$SCAN" | grep -qE 'sudo\s+(-n\s+)?(reboot|shutdown|halt|init)'; then
     ask "System reboot/shutdown. Approve to proceed."
 fi
 
-# Pattern 5: writes into /etc/ or /Library/
-if echo "$SCAN" | grep -qE '(>[> ]*|tee\s+|cp\s+.*|mv\s+.*|rm\s+.*)(/etc/|/Library/)'; then
+# Pattern 5: writes into /etc/ or /Library/ (system paths only).
+#
+# Pattern-28 second-order fix (2026-05-01): the previous regex
+# `(>[> ]*|tee\s+|cp\s+.*|mv\s+.*|rm\s+.*)(/etc/|/Library/)` matched
+# `/Library/` anywhere in the command — so `cp /Users/x/Library/foo /tmp/y`
+# (path SUBSTRING) tripped it the same way Pattern 1 did. The scanner now
+# emits `__SYS_WRITE__` only when the WRITE-TARGET arg begins with `/etc/`
+# or `/Library/` (i.e. a true system path, not a user home Library path).
+if echo "$SCAN" | grep -q '__SYS_WRITE__'; then
     ask "Modifies /etc or /Library system path. Approve to proceed."
 fi
 

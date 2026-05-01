@@ -15,7 +15,12 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pyyaml
+          # bashlex is required by shared/hooks/scan_command.py — without it
+          # the scanner skips its bashlex parse path and Pattern-28-second-order
+          # write-target classification never fires (no __LA_WRITE__ markers
+          # emitted), which silently regresses the protected_path_hook
+          # behavioural tests (test_beh004 etc).
+          pip install pytest pyyaml bashlex
       - name: Wire shared hooks to ~/.claude/hooks
         run: |
           mkdir -p "$HOME/.claude"

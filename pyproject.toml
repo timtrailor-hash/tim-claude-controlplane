@@ -1,0 +1,15 @@
+# Controlplane Python style policy.
+#
+# Line length 120 is the modern Python default (Black, ruff, most style
+# guides). The original 88-char default was chosen for narrow terminals
+# and is no longer a sensible target. This setting applies repo-wide.
+#
+# Lint scope mirrors what commit_quality_hook.sh enforces: E (pycodestyle
+# errors) + F (pyflakes). No B/C/N/UP rules — those are stylistic and
+# would force refactors of working code.
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F"]

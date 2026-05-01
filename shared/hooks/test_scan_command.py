@@ -142,6 +142,105 @@ CASES = [
     ("bypass-bash-c-mixed",
      "bash -c 'echo hi; launchctl kickstart -k foo'",
      [], ["launchctl"]),
+
+    # ── Pattern-28 second-order fix (2026-05-01) ────────────────────────
+    # The protected_path_hook used to grep for `Library/LaunchAgents`
+    # anywhere in the operative tokens. That tripped on PATH-ARGUMENT
+    # mentions inside read-only or source-position args. The scanner now
+    # emits `__LA_WRITE__` ONLY when the path appears in a write position
+    # (cp/mv DEST, tee/rm/chmod arg, `>`/`>>` redirect target).
+
+    # 1. Tim's exact failing case (2026-05-01): a benign cp+diff between
+    #    his Library/LaunchAgents and a controlplane repo path.
+    #    Path components broken into f-string fragments to stay <=120 chars.
+    ("la-cp-from-LA-to-repo-then-diff",
+     (lambda src, dst: f"cp {src} {dst} && diff {src} {dst}")(
+         "/Users/timtrailor/Library/LaunchAgents/com.timtrailor.stale-pr-alert.plist",
+         "/Users/timtrailor/code/tim-claude-controlplane/machines/mac-mini"
+         "/launchagents/com.timtrailor.stale-pr-alert.plist",
+     ),
+     ["__LA_WRITE__"], ["cp", "diff"]),
+
+    # 2. cp with LA path as SOURCE (read), non-LA dest → no write marker.
+    ("la-cp-source-only",
+     "cp /Users/x/Library/LaunchAgents/x.plist /tmp/dst.plist",
+     ["__LA_WRITE__"], ["cp"]),
+
+    # 3. mv with LA path as SOURCE, non-LA dest → no write marker.
+    ("la-mv-source-only",
+     "mv /Users/x/Library/LaunchAgents/x.plist /tmp/dst.plist",
+     ["__LA_WRITE__"], ["mv"]),
+
+    # 4. cat of an LA plist → no write marker.
+    ("la-cat-readonly",
+     "cat /Users/x/Library/LaunchAgents/x.plist",
+     ["__LA_WRITE__"], ["cat"]),
+
+    # 5. diff between two LA paths → no write marker.
+    ("la-diff-readonly",
+     "diff /Users/x/Library/LaunchAgents/a.plist /Users/x/Library/LaunchAgents/b.plist",
+     ["__LA_WRITE__"], ["diff"]),
+
+    # 6. cp with LA path as DEST (a real install) → write marker MUST fire.
+    ("la-cp-dest-is-LA",
+     "cp /tmp/src.plist /Users/x/Library/LaunchAgents/x.plist",
+     [], ["__LA_WRITE__"]),
+
+    # 7. rm of an LA path → write marker MUST fire.
+    ("la-rm-target",
+     "rm /Users/x/Library/LaunchAgents/x.plist",
+     [], ["__LA_WRITE__"]),
+
+    # 8. tee to an LA path → write marker MUST fire.
+    ("la-tee-target",
+     "tee /Users/x/Library/LaunchAgents/x.plist",
+     [], ["__LA_WRITE__"]),
+
+    # 9. `>` redirect to LA path → write marker MUST fire.
+    ("la-redirect-write",
+     "echo foo > /Users/x/Library/LaunchAgents/x.plist",
+     [], ["__LA_WRITE__"]),
+
+    # 10. launchctl bootstrap with LA path as arg → no write marker
+    #     (launchctl is not in LAST_ARG_IS_DEST or ALL_ARGS_ARE_WRITES;
+    #     Pattern 2 of the hook handles state-changing verbs separately,
+    #     so we don't need a write-marker here, and emitting one would be
+    #     redundant but harmless).
+    ("launchctl-bootstrap-arg-is-LA",
+     "launchctl bootstrap gui/501 /Users/x/Library/LaunchAgents/x.plist",
+     ["__LA_WRITE__"], ["launchctl", "bootstrap"]),
+
+    # 11. bash -c wrapping launchctl bootstrap with LA path → still
+    #     surfaces launchctl + bootstrap so Pattern 2 can match.
+    ("launchctl-bootstrap-via-bash-c",
+     "bash -c 'launchctl bootstrap gui/501 ~/Library/LaunchAgents/x.plist'",
+     [], ["launchctl", "bootstrap"]),
+
+    # 12. eval-wrapped launchctl bootout → still visible via eval recursion.
+    ("launchctl-bootout-via-eval",
+     'eval "launchctl bootout gui/501/com.timtrailor.x"',
+     [], ["launchctl", "bootout"]),
+
+    # ── /etc and /Library system-path narrowing ─────────────────────────
+    # Same anti-pattern existed in Pattern 5: `cp .* /Library/` matched
+    # any `/Library/` substring, so a path like /Users/x/Library/y also
+    # tripped. The scanner now emits __SYS_WRITE__ only when the write
+    # target STARTS with /etc/ or /Library/.
+
+    # 13. cp from a user-home Library path to /tmp → no SYS marker.
+    ("sys-cp-user-library-to-tmp",
+     "cp /Users/x/Library/Preferences/foo.plist /tmp/foo.plist",
+     ["__SYS_WRITE__"], ["cp"]),
+
+    # 14. cp into /Library/Caches → SYS marker MUST fire.
+    ("sys-cp-into-Library",
+     "cp /tmp/x /Library/Caches/x",
+     [], ["__SYS_WRITE__"]),
+
+    # 15. redirect into /etc/hosts → SYS marker MUST fire.
+    ("sys-redirect-etc",
+     "echo foo > /etc/hosts",
+     [], ["__SYS_WRITE__"]),
 ]
 
 

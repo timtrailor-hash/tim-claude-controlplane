@@ -91,6 +91,80 @@ EVAL_VERBS = {"eval"}
 GIT_MSG_VERBS = {"commit", "tag", "notes", "stash"}
 MSG_FLAGS = {"-m", "-F", "--message", "--file"}
 
+# ── Pattern-28 second-order fix (2026-05-01). ─────────────────────────────
+# The first Pattern-28 fix (this scanner) successfully stripped commit-body
+# data from the scan, but the calling hook's Pattern 1 still ran a
+# match-anywhere regex for "Library/LaunchAgents" against the operative
+# tokens. That meant a benign `cp ~/Library/LaunchAgents/x.plist /tmp/y` —
+# a pure file copy with NO state change — still matched, because the path
+# substring appeared in a positional argument to `cp`.
+#
+# Fix: classify each operative argument by its semantic role. When a path
+# inside `Library/LaunchAgents` or `Library/LaunchDaemons` appears in a
+# WRITE-TARGET position (a destination of cp/mv/rsync/install/ln, an arg
+# to tee/rm/unlink/chmod/chown/chflags/touch, or the target of `>`/`>>`/
+# `&>` redirects), emit the sentinel `__LA_WRITE__` into the scan. The
+# calling hook's Pattern 1 then matches the sentinel rather than the raw
+# substring, so paths in read or source positions don't trip the alert.
+#
+# Anti-pattern recorded for future hooks: NEVER match a load-bearing path
+# substring (a path that can appear in an arg as data) anywhere in a
+# command. Always classify by argument role (write target vs source vs
+# verb token) at AST level. See lessons.md Pattern 28 addendum.
+LA_PATH_RE = re.compile(r"Library/(LaunchAgents|LaunchDaemons)")
+
+# System-path write targets: paths that BEGIN with /etc/ or /Library/.
+# Note the leading slash — `~/Library/` (user home) and any other prefix
+# does NOT qualify as a system path. The previous Pattern-5 regex matched
+# `/Library/` anywhere in the line, so a `cp /Users/x/Library/... /tmp/...`
+# (a path containing the substring `/Library/`) tripped it. We now anchor
+# at the start of the literal path arg.
+SYS_PATH_RE = re.compile(r"^(/etc/|/Library/)")
+
+# Commands where the LAST non-flag positional argument is a write target
+# (the destination), and earlier non-flag args are sources / read-only.
+LAST_ARG_IS_DEST = {"cp", "mv", "rsync", "install", "ln"}
+
+# Commands where ALL non-flag positional args are write targets.
+ALL_ARGS_ARE_WRITES = {
+    "tee", "rm", "unlink", "rmdir", "chmod", "chown", "chflags",
+    "touch", "mkdir",
+}
+
+# Redirect operators that WRITE to their target.
+WRITE_REDIRECT_TYPES = {">", ">>", "&>", "&>>", ">|", "1>", "2>", "1>>", "2>>"}
+
+
+def _is_flag(word: str) -> bool:
+    """Return True for `-x` / `--long-opt` style argv tokens."""
+    return word.startswith("-") and word != "-"
+
+
+def _word_literal(node) -> str:
+    """Best-effort literal text of a `word` node, with leading `~` expanded.
+    Used only for path classification (LA_PATH_RE). Quote-stripping is OK
+    because we're checking for a substring match, not re-executing."""
+    w = getattr(node, "word", "") or ""
+    if len(w) >= 2 and w[0] == w[-1] and w[0] in ("'", '"'):
+        w = w[1:-1]
+    return w
+
+
+def _emit_la_marker_if_match(node, out: list[str]) -> None:
+    """If the given word node's literal text contains a Library/LaunchAgents
+    (or LaunchDaemons) path, emit the __LA_WRITE__ sentinel.
+
+    Also emit __SYS_WRITE__ if the path begins with /etc/ or /Library/
+    (system path), so Pattern 5 of the calling hook can match without
+    using the previous overly broad regex that hit user paths under
+    /Users/<x>/Library/.
+    """
+    txt = _word_literal(node)
+    if LA_PATH_RE.search(txt):
+        out.append("__LA_WRITE__")
+    if SYS_PATH_RE.match(txt):
+        out.append("__SYS_WRITE__")
+
 
 def _node_text(node, raw: str) -> str:
     """Return the slice of `raw` that this node spans, or its textual repr."""
@@ -154,6 +228,12 @@ def _emit(node, out: list[str], raw: str, in_msg_arg: bool = False) -> None:
         out.append(rtype)
         outp = getattr(node, "output", None)
         if outp is not None:
+            # If this redirect WRITES to its target and the target path is
+            # under Library/LaunchAgents, emit the __LA_WRITE__ sentinel so
+            # the hook's Pattern 1 can match an actual write — not just any
+            # mention of the LA path in a read-only context.
+            if rtype in WRITE_REDIRECT_TYPES and getattr(outp, "kind", None) == "word":
+                _emit_la_marker_if_match(outp, out)
             _emit(outp, out, raw, in_msg_arg=False)
         # heredoc body (UNQUOTED): inner substitutions are real; descend.
         hd = getattr(node, "heredoc", None)
@@ -212,6 +292,24 @@ def _emit(node, out: list[str], raw: str, in_msg_arg: bool = False) -> None:
                 wtxt = getattr(w, "word", "") or ""
                 if wtxt in MSG_FLAGS and i + 1 < len(words):
                     msg_arg_ids.add(id(words[i + 1]))
+
+        # ── Pattern-28-2nd-order: classify write-target args by command. ─
+        # If this command writes to a path under Library/LaunchAgents, emit
+        # __LA_WRITE__ once for each such write target. Read-only and source
+        # args are NOT marked.
+        non_flag_word_indices = [
+            i for i, w in enumerate(words)
+            if i > 0 and not _is_flag(getattr(w, "word", "") or "")
+        ]
+        if first in LAST_ARG_IS_DEST and non_flag_word_indices:
+            # cp / mv / rsync / install / ln: only the last positional arg
+            # is the destination (where new content lands).
+            dest_idx = non_flag_word_indices[-1]
+            _emit_la_marker_if_match(words[dest_idx], out)
+        elif first in ALL_ARGS_ARE_WRITES:
+            # tee / rm / chmod / etc: every positional arg is a write target.
+            for i in non_flag_word_indices:
+                _emit_la_marker_if_match(words[i], out)
 
         for p in parts:
             if getattr(p, "kind", None) == "word" and id(p) in msg_arg_ids:

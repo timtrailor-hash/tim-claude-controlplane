@@ -24,6 +24,7 @@ FORCE=0
 DEPLOY_START_TS=$(date +%s)
 SNAPSHOT_DIR=""
 TOUCHED_PLISTS=()
+TOUCHED_DAEMONS=()
 
 for arg in "$@"; do
     case "$arg" in
@@ -85,6 +86,35 @@ auto_rollback() {
         done
     fi
 
+    # Restore daemon files. For each daemon we touched this run, either
+    # restore from snapshot (existed before) or remove (newly created).
+    # Same atomic-rename pattern used in the apply phase, so the path is
+    # always either old or new, never missing during the swap.
+    for name in "${TOUCHED_DAEMONS[@]}"; do
+        live="$HOME/code/$name"
+        snap="$SNAPSHOT_DIR/daemons/$name"
+        if [ -e "$snap" ] || [ -L "$snap" ]; then
+            # Snapshot exists. If it's a dangling symlink, restoring it
+            # preserves prior state but the daemon will fail next run.
+            # Surface this loudly so the operator knows.
+            if [ -L "$snap" ] && [ ! -e "$snap" ]; then
+                echo "  WARN: Restoring dangling symlink for $name" \
+                     "(target: $(readlink "$snap"))"
+            fi
+            tmp="${live}.rollback-tmp.$$"
+            cp -RP "$snap" "$tmp"
+            mv -f "$tmp" "$live"
+            echo "  Restored daemon: $name"
+        else
+            # No snapshot = this daemon did not exist before deploy. The
+            # symlink we created is the only thing here; remove it.
+            if [ -L "$live" ] || [ -e "$live" ]; then
+                rm -f "$live"
+                echo "  Removed newly-created daemon: $name"
+            fi
+        fi
+    done
+
     echo "Rollback complete."
     exit 1
 }
@@ -122,6 +152,21 @@ if [ "$DRY_RUN" = "0" ]; then
         mkdir -p "$SNAPSHOT_DIR/launchagents"
         for plist in "$LA_SUBDIR"/com.timtrailor.*.plist; do
             [ -f "$plist" ] && cp "$plist" "$SNAPSHOT_DIR/launchagents/"
+        done
+    fi
+
+    # Snapshot any current ~/code/<daemon> files that the daemons stage
+    # may replace. Captures both real files and existing symlinks so a
+    # rollback can put the originals back exactly as they were.
+    if [ "$MACHINE" = "mac-mini" ] && [ -d "$MACHINE_DIR/daemons" ]; then
+        mkdir -p "$SNAPSHOT_DIR/daemons"
+        for src in "$MACHINE_DIR/daemons"/*; do
+            [ -f "$src" ] || continue
+            name=$(basename "$src")
+            live="$HOME/code/$name"
+            if [ -e "$live" ] || [ -L "$live" ]; then
+                cp -RP "$live" "$SNAPSHOT_DIR/daemons/$name"
+            fi
         done
     fi
 
@@ -224,6 +269,85 @@ if [ -f "$SHARED/config/printer_config.toml" ]; then
     fi
 fi
 
+# Mac Mini only: replace ~/code/<daemon> with a symlink to the controlplane copy.
+# Each script in $MACHINE_DIR/daemons/ is the canonical source. The deployed path
+# stays at ~/code/<x> so existing cross-references and plists keep working.
+# The swap uses a temp link + atomic rename (mv -f) rather than `ln -sfn`,
+# which would leave a brief gap where the path resolves to nothing.
+if [ "$MACHINE" = "mac-mini" ] && [ -d "$MACHINE_DIR/daemons" ]; then
+    mkdir -p "$HOME/code"
+    SRC_REAL_DIR=$(/usr/bin/python3 -c \
+        "import os,sys; print(os.path.realpath(sys.argv[1]))" \
+        "$MACHINE_DIR/daemons")
+    for src in "$MACHINE_DIR/daemons"/*; do
+        [ -f "$src" ] || continue
+        name=$(basename "$src")
+        live="$HOME/code/$name"
+        src_canon="$SRC_REAL_DIR/$name"
+        # Compare canonical paths so a different controlplane checkout
+        # location resolves to the same realpath and we don't churn.
+        if [ -L "$live" ]; then
+            live_target=$(/usr/bin/python3 -c \
+                "import os,sys; print(os.path.realpath(sys.argv[1]))" \
+                "$live")
+            if [ "$live_target" = "$src_canon" ]; then
+                continue
+            fi
+        fi
+        # Refuse to swap if the live path is a directory — mv would move
+        # the temp symlink INTO the directory rather than replacing it.
+        # This catches manual mistakes and tooling drift.
+        if [ -d "$live" ] && [ ! -L "$live" ]; then
+            echo "  daemon/$name: ABORT — $live is a directory, refusing to overwrite"
+            auto_rollback
+        fi
+        if [ "$DRY_RUN" = "1" ]; then
+            if [ -e "$live" ] && [ ! -L "$live" ]; then
+                echo "  daemon/$name: WOULD replace file with symlink → $src"
+            else
+                echo "  daemon/$name: WOULD link → $src"
+            fi
+            continue
+        fi
+        # Stage the new symlink alongside, then atomic rename. mv -f on
+        # macOS replaces the destination as a single rename(2) so the path
+        # never resolves to nothing.
+        tmp="${live}.deploy-tmp.$$"
+        ln -s "$src" "$tmp"
+        mv -f "$tmp" "$live"
+        echo "  daemon/$name: linked → $src"
+        TOUCHED_DAEMONS+=("$name")
+        CHANGES=1
+    done
+    # Pattern 24 reconciliation: any symlink in ~/code/ that points into
+    # our controlplane daemons dir but whose source has been removed is
+    # stale. Drop it. This makes deletion of a daemon source actually
+    # remove the live deployment, instead of silently keeping a dangling
+    # symlink that launchd would later fail on.
+    for live in "$HOME/code"/*; do
+        [ -L "$live" ] || continue
+        target=$(readlink "$live")
+        case "$target" in
+            "$MACHINE_DIR/daemons/"*)
+                if [ ! -e "$target" ]; then
+                    if [ "$DRY_RUN" = "1" ]; then
+                        echo "  daemon/$(basename "$live"): WOULD remove stale symlink"
+                    else
+                        rm -f "$live"
+                        echo "  daemon/$(basename "$live"): removed stale symlink (source deleted)"
+                        CHANGES=1
+                    fi
+                fi
+                ;;
+        esac
+    done
+    if [ "${#TOUCHED_DAEMONS[@]}" -eq 0 ]; then
+        echo "  daemons: $(find "$MACHINE_DIR/daemons" -maxdepth 1 -type f 2>/dev/null | wc -l | xargs) managed (no changes)"
+    else
+        echo "  daemons: ${#TOUCHED_DAEMONS[@]} updated"
+    fi
+fi
+
 # Mac Mini only: apply LaunchAgents
 if [ "$MACHINE" = "mac-mini" ] && [ -d "$MACHINE_DIR/launchagents" ]; then
     for plist in "$MACHINE_DIR/launchagents"/*.plist; do
@@ -283,6 +407,62 @@ echo
 if [ "$DRY_RUN" = "1" ]; then
     echo "DRY RUN — no changes applied"
     exit 0
+fi
+
+# ── Step 4a: Daemon syntax probe ──
+# After symlinkifying any daemon, exercise the live path with a fast
+# syntax-only check. Catches scenarios where a daemon source was edited
+# in a way that breaks parsing or where the symlink resolves wrong.
+if [ "$MACHINE" = "mac-mini" ] && [ "${#TOUCHED_DAEMONS[@]}" -gt 0 ]; then
+    echo
+    echo "--- Daemon syntax probe (${#TOUCHED_DAEMONS[@]} touched) ---"
+    PROBE_FAIL=0
+    # Resolve a Python interpreter rather than hardcoding the brew path.
+    # Falls back through PATH if the brew install moved (e.g. python3.12 upgrade).
+    PROBE_PY=""
+    for cand in /opt/homebrew/bin/python3.11 "$(command -v python3.11 2>/dev/null)" "$(command -v python3 2>/dev/null)"; do
+        if [ -n "$cand" ] && [ -x "$cand" ]; then
+            PROBE_PY="$cand"
+            break
+        fi
+    done
+    for name in "${TOUCHED_DAEMONS[@]}"; do
+        live="$HOME/code/$name"
+        case "$name" in
+            *.py)
+                if [ -z "$PROBE_PY" ]; then
+                    echo "  FAIL: $name (no python3 interpreter found for probe)"
+                    PROBE_FAIL=1
+                    continue
+                fi
+                # py_compile exercises the real bytecode path the daemon
+                # will go through under launchd, not just text parsing.
+                if ! probe_out=$("$PROBE_PY" -m py_compile "$live" 2>&1); then
+                    echo "  FAIL: $name (Python compile error)"
+                    printf '%s\n' "$probe_out" | sed 's/^/      /'
+                    PROBE_FAIL=1
+                fi
+                ;;
+            *.sh)
+                if ! probe_out=$(/bin/bash -n "$live" 2>&1); then
+                    echo "  FAIL: $name (bash syntax error)"
+                    printf '%s\n' "$probe_out" | sed 's/^/      /'
+                    PROBE_FAIL=1
+                fi
+                ;;
+            *)
+                if [ ! -e "$live" ]; then
+                    echo "  FAIL: $name (path does not resolve)"
+                    PROBE_FAIL=1
+                fi
+                ;;
+        esac
+    done
+    if [ "$PROBE_FAIL" = "1" ]; then
+        echo "FAIL: Daemon syntax probe failed!"
+        auto_rollback
+    fi
+    echo "  All ${#TOUCHED_DAEMONS[@]} daemon(s) parse clean"
 fi
 
 # ── Step 4: Post-deploy verification with auto-rollback ──
