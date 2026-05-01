@@ -180,7 +180,9 @@ When the final verdict is APPROVE and `+no-merge` is NOT set, complete the merge
    - Push the branch.
    - Open a PR via `gh pr create` from the laptop (Mac Mini's gh auth may be stale; the laptop's `gh` is the canonical actor).
    - Use the review synthesis as the PR body (Summary, Changes, Review verdicts, Test plan).
-   - Poll `gh pr view <N> --json statusCheckRollup` until all checks complete.
+   - Query `gh pr view <N> --json statusCheckRollup,mergeable,mergeStateStatus` once, then decide:
+     - **`statusCheckRollup` is empty AND `mergeable=MERGEABLE`** (repo has no required checks; e.g. `claude-code-starter`) → merge immediately. Do NOT poll. There is nothing to wait for. *(Stale-PR incident 2026-05-01: PR sat 176h because the loop hung waiting for checks that didn't exist.)*
+     - **Checks present but still pending** → poll until complete (≤20 min timeout).
      - **All SUCCESS + MERGEABLE** → `gh pr merge <N> --squash --delete-branch`. Then `git fetch && git reset --hard origin/main` on the local checkout.
      - **Any FAILURE** → escalate to Tim with the failing check name and link.
      - **TIMEOUT** (>20 min) → escalate to Tim with a "checks still pending" note.
