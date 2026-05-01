@@ -82,10 +82,29 @@ password\s*[=:]\s*["'][^\s"']{8,}
 PATTERNS
 fi
 
-# ── (b) Ruff lint on staged .py files ──
+# ── (b) Ruff lint on staged .py files (AUTO-FIX BEFORE BLOCKING) ──
+# Hooks must guide, not block. If ruff can fix it, fix it and re-stage; only
+# block on residual errors that Claude has to resolve manually.
 if command -v ruff >/dev/null 2>&1; then
     STAGED_PY=$(git diff --cached --name-only 2>/dev/null | grep '\.py$')
     if [ -n "$STAGED_PY" ]; then
+        # First pass: auto-fix anything ruff can handle (unused imports,
+        # trailing commas, simple style issues). Re-stage the modified files
+        # so the actual commit picks them up.
+        FIXED_FILES=""
+        while IFS= read -r pyfile; do
+            [ -f "$pyfile" ] || continue
+            BEFORE=$(md5 -q "$pyfile" 2>/dev/null || md5sum "$pyfile" 2>/dev/null | awk '{print $1}')
+            ruff check --select E,F --fix "$pyfile" >/dev/null 2>&1 || true
+            AFTER=$(md5 -q "$pyfile" 2>/dev/null || md5sum "$pyfile" 2>/dev/null | awk '{print $1}')
+            if [ "$BEFORE" != "$AFTER" ]; then
+                git add "$pyfile" >/dev/null 2>&1 || true
+                FIXED_FILES="$FIXED_FILES
+  - auto-fixed and re-staged: $pyfile"
+            fi
+        done <<< "$STAGED_PY"
+
+        # Second pass: collect any errors ruff could NOT auto-fix.
         RUFF_ERRORS=""
         while IFS= read -r pyfile; do
             [ -f "$pyfile" ] || continue
@@ -95,9 +114,21 @@ if command -v ruff >/dev/null 2>&1; then
 $RESULT"
             fi
         done <<< "$STAGED_PY"
+
+        if [ -n "$FIXED_FILES" ]; then
+            # Surface what was fixed, but do not block. Print to stderr so the
+            # Claude session sees it and can verify.
+            echo "[commit_quality] auto-fixed lint issues:$FIXED_FILES" >&2
+        fi
         if [ -n "$RUFF_ERRORS" ]; then
             ISSUES="$ISSUES
-- LINT ERRORS in staged Python files (ruff):$RUFF_ERRORS"
+- LINT ERRORS that ruff could not auto-fix (please address before re-running commit):$RUFF_ERRORS
+
+  How to fix:
+    1. Read the error messages above. Each names the file:line and the rule.
+    2. Run \`ruff check --fix <file>\` to apply mechanical fixes.
+    3. For non-auto-fixable rules (E712 truth comparison, F811 redef, F841 unused-var with side effects), edit the file and resolve the issue.
+    4. Re-run the same git commit command. The hook will re-check."
         fi
     fi
 fi
