@@ -104,6 +104,11 @@
             "type": "command",
             "command": "bash /Users/timtrailor/.claude/hooks/commit_guard.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/timtrailor/.claude/hooks/commit_quality_hook.sh",
+            "timeout": 10
           }
         ]
       },
@@ -114,6 +119,11 @@
             "type": "command",
             "command": "bash /Users/timtrailor/.claude/hooks/credential_leak_hook.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/timtrailor/.claude/hooks/freeze_mode_hook.sh",
+            "timeout": 5
           }
         ]
       },
@@ -123,6 +133,11 @@
           {
             "type": "command",
             "command": "bash /Users/timtrailor/.claude/hooks/credential_leak_hook.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/timtrailor/.claude/hooks/freeze_mode_hook.sh",
             "timeout": 5
           }
         ]
@@ -175,8 +190,18 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash /Users/timtrailor/.claude/hooks/response_quality_check.sh",
+            "timeout": 8
+          },
+          {
+            "type": "command",
             "command": "bash /Users/timtrailor/.claude/hooks/la_turn_hook.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/timtrailor/.claude/hooks/continuous_learning_hook.sh",
+            "timeout": 30
           }
         ]
       }

@@ -118,6 +118,19 @@ services:
     auto_fix: false
     notes: "Evaluate: 10-min polling necessary? Consider webhook or hourly."
 
+  stale-pr-alert:
+    purpose: "Detect PRs open >24h; auto-merge if safety gate passes (CLEAN, MERGEABLE, checks SUCCESS, Claude-authored), email otherwise"
+    owner: stale_pr_alert.py
+    mode: "StartCalendarInterval Minute=7 (hourly :07)"
+    python: /opt/homebrew/bin/python3.11
+    code: ~/code/stale_pr_alert.py
+    secrets:
+      - SMTP_USER  # via credentials.py
+      - SMTP_PASS
+    failure_mode: "LOW — stale PR detection paused; merges fall back to /review session"
+    auto_fix: false
+    notes: "Auto-merge added 2026-05-01. Tracked plist added to controlplane same day."
+
   ci-failure-poller:
     purpose: "Poll GitHub Actions for main-branch failures > 1h old; push to Terminal APNs. Replaces ntfy."
     owner: ci_failure_poller.py

@@ -310,6 +310,11 @@ def parse_manifest_mode(mode):
         return ("StartCalendarInterval",
                 (("Hour", int(m.group(2))), ("Minute", int(m.group(3))),
                  ("Weekday", wd)))
+    # StartCalendarInterval Minute=N — fires every hour at minute N.
+    # Used by stale-pr-alert (Minute=7).
+    m = re.fullmatch(r"StartCalendarInterval\s+Minute=(\d{1,2})", s)
+    if m:
+        return ("StartCalendarInterval", (("Minute", int(m.group(1))),))
     raise ValueError(f"unrecognised mode shape: {s!r}")
 
 def parse_plist_schedule(plist_path):
@@ -323,12 +328,23 @@ def parse_plist_schedule(plist_path):
     if "StartInterval" in d:
         return ("StartInterval", int(d["StartInterval"]))
     sci = d.get("StartCalendarInterval")
+    # macOS accepts both dict (single trigger) and array-of-dicts (multiple
+    # triggers) shapes. We only handle the single-trigger array case here;
+    # multi-trigger plists are out of scope and surface as Unknown drift.
+    if isinstance(sci, list) and len(sci) == 1 and isinstance(sci[0], dict):
+        sci = sci[0]
     if isinstance(sci, dict):
-        # Only carry keys we know how to compare; Weekday is optional.
-        parts = [("Hour", int(sci.get("Hour", 0))),
-                 ("Minute", int(sci.get("Minute", 0)))]
+        # Only carry keys actually present so a Minute-only schedule
+        # doesn't collide with an explicit Hour=0 daily schedule.
+        parts = []
+        if "Hour" in sci:
+            parts.append(("Hour", int(sci["Hour"])))
+        if "Minute" in sci:
+            parts.append(("Minute", int(sci["Minute"])))
         if "Weekday" in sci:
             parts.append(("Weekday", int(sci["Weekday"])))
+        if not parts:
+            return ("Unknown", None)
         return ("StartCalendarInterval", tuple(parts))
     # Nothing schedule-ish beyond RunAtLoad → treat as RunAtLoad one-shot.
     if d.get("RunAtLoad"):

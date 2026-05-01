@@ -259,6 +259,23 @@ services:
       max_age_hours: 1
     notes: "StartInterval — not continuously running; probe the output state file instead. Evaluate: 10-min polling necessary?"
 
+  stale-pr-alert:
+    label: com.timtrailor.stale-pr-alert
+    purpose: "Detect PRs open >24h, auto-merge if safety gate passes, email otherwise"
+    owner: stale_pr_alert.py
+    mode: StartCalendarInterval Minute=7
+    code: ~/code/stale_pr_alert.py
+    secrets:
+      - SMTP_USER  # via credentials.py
+      - SMTP_PASS
+    failure_mode: LOW
+    failure_impact: "stale PR detection paused; no auto-merge; merges fall back to /review"
+    probe:
+      type: file_age
+      path: /Users/timtrailor/code/stale_pr_log.jsonl
+      max_age_hours: 2
+    notes: "Hourly-ish via :07 cron. Auto-merges PRs that match the gate (CLEAN, MERGEABLE, all checks SUCCESS or none, author=timtrailor-hash, Claude co-author trailer)."
+
 # ---------------------------------------------------------------------------
 # CRON JOBS — scheduled tasks not run as LaunchAgents.
 # ---------------------------------------------------------------------------
