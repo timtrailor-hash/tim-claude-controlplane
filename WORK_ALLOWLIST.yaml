@@ -86,6 +86,22 @@ allow:
       reason: Test-before-sharing-with-Tim rule. Generic.
     - path: shared/work-topics/work-bridge-phase2-plan.md
       reason: Shared phase-2 plan (slices A-D); both sides treat as truth. No personal infra refs after sanitisation pass.
+    # L2 batch (2026-05-01): heavier sanitised topics so the work-side reviewer
+    # subagent and skills have institutional context (lessons, quality toolchain,
+    # memory architecture, work-side credentials inventory, work-context profile
+    # and session checklist).
+    - path: shared/work-topics/lessons.md
+      reason: Sanitised work-relevant subset of incident patterns (13 patterns, 209 lines). Printer/governors/family/Mac-Mini specifics dropped. Read by the code-reviewer subagent during /review.
+    - path: shared/work-topics/quality-toolchain.md
+      reason: /review pipeline + reviewer roster + lint hook + response-gate. Generic, no personal infra. 81 lines.
+    - path: shared/work-topics/memory-system.md
+      reason: ChromaDB + FTS5 architecture + scope frontmatter + bridge filter + three-query-shape rule. Generic. 169 lines.
+    - path: shared/work-topics/credentials-keychain-work.md
+      reason: Keychain inventory for the work side (work-only key names + resolver pattern + rotation runbook). Personal keys never appear.
+    - path: shared/work-topics/user_profile-work.md
+      reason: Tim's profile rewritten for the work-laptop context (CEO + ADHD + bridge endpoints). No personal devices or hardware.
+    - path: shared/work-topics/session-instructions-work.md
+      reason: Session-start checklist for the work side. Confirms bridge MCP, memory MCP, slash skills, and reads the canonical phase-2 plan. No personal-side refs.
 
 # Explicit deny list — not required (default is deny) but documented here so
 # the reasoning behind sensitive-but-tempting paths is captured. If a future
