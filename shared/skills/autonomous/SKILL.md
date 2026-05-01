@@ -88,6 +88,16 @@ The runner creates `/tmp/autonomous_task_active` while running (contains PID, st
 Check progress: `tail -f /tmp/autonomous_runner.log`
 Check if running: `cat /tmp/autonomous_task_active 2>/dev/null`
 
+## Work-Laptop Dual-Channel (Phase-2 bridge, 2026-05-01)
+
+When `~/.claude/.work-laptop` exists, the runner cannot use SMTP directly (no personal
+SMTP credentials on the work machine). Instead it writes the email payload to
+`~/.claude/bridge_outbox/email-<uuid>.json` with shape `{to, subject, body, ts}`.
+The personal-side bridge gateway poller picks these up and forwards via `send_email_self`.
+
+This is transparent to callers — `send_email()` auto-detects the marker and routes
+accordingly. ntfy/Slack fallbacks are skipped on the work side (no personal tokens).
+
 ## Important Notes
 
 - The runner uses `claude -p` (non-interactive) — same model, same tools, same CLAUDE.md/memory

@@ -39,6 +39,9 @@ LOG_FILE = "/tmp/autonomous_runner.log"
 MARKER_FILE = "/tmp/autonomous_task_active"
 EMAIL_SENT_MARKER = "/tmp/autonomous_email_sent"
 
+WORK_LAPTOP_MARKER = os.path.expanduser("~/.claude/.work-laptop")
+BRIDGE_OUTBOX = os.path.expanduser("~/.claude/bridge_outbox")
+
 # Load credentials from credentials.py
 def load_creds():
     """Load all credentials from credentials.py."""
@@ -248,8 +251,43 @@ def run_claude(prompt, timeout_seconds=600):
 
 # ── Notification channels ─────────────────────────────────────────────────────
 
+def _is_work_laptop() -> bool:
+    return os.path.exists(WORK_LAPTOP_MARKER)
+
+
+def _bridge_send_email(to_email, subject, body_text) -> bool:
+    """Write email payload to bridge outbox for the personal-side poller."""
+    try:
+        os.makedirs(BRIDGE_OUTBOX, exist_ok=True)
+        uid = os.urandom(8).hex()
+        payload = {
+            "to": to_email,
+            "subject": subject,
+            "body": body_text,
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
+        outfile = Path(BRIDGE_OUTBOX) / f"email-{uid}.json"
+        outfile.write_text(json.dumps(payload))
+        log(f"Bridge email queued: {outfile.name}")
+        Path(EMAIL_SENT_MARKER).write_text(
+            json.dumps({
+                "sent_at": payload["ts"],
+                "to": to_email,
+                "subject": subject,
+                "channel": "bridge_outbox",
+            })
+        )
+        return True
+    except Exception as e:
+        log(f"Bridge email failed: {e}")
+        return False
+
+
 def send_email(to_email, subject, body_text, body_html=None, max_retries=3):
-    """Send email via SMTP with retries. Returns True if sent."""
+    """Send email via SMTP (personal) or bridge outbox (work laptop)."""
+    if _is_work_laptop():
+        return _bridge_send_email(to_email, subject, body_text)
+
     creds = load_smtp_creds()
 
     for attempt in range(1, max_retries + 1):
@@ -303,7 +341,8 @@ def send_ntfy(subject, body_text, max_retries=3):
 
     # ntfy has a 4096-byte message limit — truncate body
     max_body = 3800
-    truncated = body_text[:max_body] + ("\n\n[TRUNCATED — full result in email or /tmp/autonomous_result.txt]" if len(body_text) > max_body else "")
+    suffix = "\n\n[TRUNCATED — full result in email or /tmp/autonomous_result.txt]"
+    truncated = body_text[:max_body] + (suffix if len(body_text) > max_body else "")
 
     for attempt in range(1, max_retries + 1):
         try:
@@ -354,7 +393,8 @@ def send_slack_dm(subject, body_text, max_retries=3):
 
     # Slack message limit is ~40k chars but keep it reasonable
     max_body = 3800
-    truncated = body_text[:max_body] + ("\n\n_[Truncated — full result in email or /tmp/autonomous_result.txt]_" if len(body_text) > max_body else "")
+    slack_suffix = "\n\n_[Truncated — full result in email or /tmp/autonomous_result.txt]_"
+    truncated = body_text[:max_body] + (slack_suffix if len(body_text) > max_body else "")
     message = f"*{subject}*\n\n{truncated}"
 
     for attempt in range(1, max_retries + 1):
