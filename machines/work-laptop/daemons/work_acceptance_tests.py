@@ -54,7 +54,7 @@ RESULTS_PATH = Path("/tmp/work_acceptance_results.json")
 
 HOOKS_DIR = Path.home() / ".claude" / "hooks"
 RULES_DIR = Path.home() / ".claude" / "rules"
-CLAUDE_JSON = Path.home() / ".claude.json"
+CLAUDE_JSON = Path.home() / ".claude" / "settings.json"
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 LINT_LOG = Path.home() / ".claude" / "lint_findings.log"
 HEALTH_RESULTS = Path("/tmp/work_health_check_results.json")
