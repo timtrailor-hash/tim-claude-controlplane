@@ -129,3 +129,26 @@ Recommendations:
 ### 6. Don't auto-fix
 
 NEVER automatically rsync or overwrite. Report and let Tim choose direction. The wrong sync direction destroys work.
+
+---
+
+## Work-Side Mode (Phase-2 bridge, 2026-05-01)
+
+When `~/.claude/.work-laptop` exists, steps 1-5 above are replaced with a work-specific diff:
+
+### What to compare (work side)
+
+| Pair | Work Laptop | Personal (via bridge) |
+|---|---|---|
+| Shared rules | `~/.claude/rules/` | Query bridge: `bridge_search_personal_memory(query="inventory shared rules", scope="shared")` |
+| Shared skills | `~/.claude/skills/` | List from WORK_ALLOWLIST.yaml allow.skills |
+| Work topics | project memory `topics/` | `shared/work-topics/` in controlplane |
+
+### Steps (work side)
+
+1. List all files under `~/.claude/{rules,skills,hooks,agents}/` on the work laptop.
+2. Read `WORK_ALLOWLIST.yaml` allow sections to get the expected set of deployed files.
+3. Diff: files present locally but not in allowlist (unexpected), files in allowlist but missing locally (deploy gap).
+4. For deployed files, compare md5 of local copy vs controlplane source (if the controlplane repo is cloned locally at `~/code/tim-claude-controlplane/`).
+5. Report drift with same format as personal-side output.
+6. Don't auto-fix. Report and let Tim choose.

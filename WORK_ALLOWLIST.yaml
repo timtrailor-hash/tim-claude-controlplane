@@ -67,6 +67,12 @@ allow:
       reason: "Slice I 2026-05-01: topic name as $ARGUMENTS, $CLAUDE_PROJECT_DIR-discovered memory tree, env→Keychain credentials lookup. Works on both sides."
     - path: shared/skills/secure-delete/SKILL.md
       reason: "Slice I 2026-05-01: ChromaDB data dir resolved at runtime in env→work_memory_data→personal-side-defaults order. Works on both sides without regression."
+    - path: shared/skills/autonomous/SKILL.md
+      reason: "Phase-2 2026-05-01: dual-channel email (SMTP on personal, bridge_outbox on work). Persistent retry-loop runner works on both sides."
+    - path: shared/skills/autonomous/autonomous_runner.py
+      reason: "Phase-2 2026-05-01: _is_work_laptop() gate routes email via bridge_outbox when .work-laptop marker present. Personal-side SMTP path unchanged."
+    - path: shared/skills/drift-check/SKILL.md
+      reason: "Phase-2 2026-05-01: side-aware — personal does laptop-vs-Mac-Mini diff, work does shared/-vs-bridge inventory diff. Unified UX."
 
   hooks:
     # Slice E (2026-05-01): nine sanitised hooks deployed by claude-bridge
@@ -143,6 +149,10 @@ allow:
       reason: Tim's profile rewritten for the work-laptop context (CEO + ADHD + bridge endpoints). No personal devices or hardware.
     - path: shared/work-topics/session-instructions-work.md
       reason: Session-start checklist for the work side. Confirms bridge MCP, memory MCP, slash skills, and reads the canonical phase-2 plan. No personal-side refs.
+    - path: shared/work-topics/server-architecture-work.md
+      reason: "Phase-2 2026-05-01: sanitised daemon/utility patterns. Personal hardware, IPs, specific daemon paths stripped. Generic architecture guidance."
+    - path: shared/work-topics/architecture-plan-work.md
+      reason: "Phase-2 2026-05-01: sanitised phase plan. Personal projects (printer, governors, BGT) stripped. Shared patterns: resilience, alerting, hardening."
 
 # Explicit deny list — not required (default is deny) but documented here so
 # the reasoning behind sensitive-but-tempting paths is captured. If a future
@@ -228,7 +238,7 @@ deny_explicit:
   - path: shared/skills/compliance/
     reason: Acceptance-test compliance score for home system.
   - path: shared/skills/drift-check/
-    reason: Laptop ↔ Mac Mini code drift checker.
+    reason: "MOVED TO ALLOW (2026-05-01 phase-2): side-aware mode added. Work side diffs deployed vs allowlist instead of laptop-vs-Mac-Mini."
   - path: shared/skills/lessons-check/
     reason: Pattern-match against lessons.md (printer/daemon-specific incidents).
   - path: shared/skills/secure-delete/
@@ -236,7 +246,7 @@ deny_explicit:
   - path: shared/skills/rotate-token/
     reason: Token rotation against personal credentials.py / Keychain entries.
   - path: shared/skills/autonomous/
-    reason: Persistent runner that emails Tim via personal SMTP creds. Personal only in v1; revisit if work needs background tasks.
+    reason: "MOVED TO ALLOW (2026-05-01 phase-2): dual-channel send_email auto-detects .work-laptop marker and routes via bridge_outbox instead of SMTP. Safe on both sides."
   - path: shared/skills/memory/
     reason: Tied to a personal-side memory backend. Work side runs its own memory; cross-environment memory queries are handled by the bridge layer per the integration plan, not by exposing this skill's body.
   - path: shared/skills/createoutput/
