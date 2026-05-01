@@ -45,6 +45,12 @@ allow:
   skills:
     - path: shared/skills/review/SKILL.md
       reason: /review pipeline (ruff + semgrep + reviewer subagents + auto-merge). Repo-agnostic logic. References `~/.claude/hooks/sensitivity_check.sh` — work side will ship its own stub or no-op when the work-side helper is wired up in step 7.
+    - path: shared/skills/chatgpt/SKILL.md
+      reason: "Independent ChatGPT reviewer. 2026-05-01 phase-2 slice C: credentials.py probe replaced with env then Keychain (WORK_OPENAI_API_KEY then OPENAI_API_KEY) then credentials.py fallback resolver. Works on both sides."
+    - path: shared/skills/gemini/SKILL.md
+      reason: Independent Gemini reviewer. Same env/Keychain/credentials.py resolver as chatgpt; uses GEMINI_API_KEY accounts.
+    - path: shared/skills/debate/SKILL.md
+      reason: Three-way Claude/Gemini/ChatGPT debate. Same shared resolver pattern. The grep-over-~/code/~/.claude scope walk inside debate body still mentions personal paths but works on either side because the directories exist on both.
 
 # Explicit deny list — not required (default is deny) but documented here so
 # the reasoning behind sensitive-but-tempting paths is captured. If a future
@@ -74,12 +80,9 @@ deny_explicit:
     reason: Body names the three personal code-location paths (`~/Documents/Claude code/`, `~/code/`, `~/.local/lib/`) as topology context for the reviewer role, plus references `credentials.py` as a concrete file. Mild leakage but consistent enough to be deferred. Sanitise during directory split, then re-allow.
   - path: shared/agents/second-opinion.md
     reason: Imports OpenAI/Gemini keys from `credentials.py` directly (not Keychain). Work side already gets the same dual-model review via the chatgpt + gemini skills, once those are sanitised and shimmed. Defer until the credential-resolution shim exists.
-  - path: shared/skills/chatgpt/SKILL.md
-    reason: "Body inlines a `for cand in (\"~/code\", \"~/Documents/Claude code\"): … from credentials import OPENAI_API_KEY` probe — concrete personal-path code, not just a heuristic. Defer until the work-side credential shim exists (step 3 keychain entry + step 7 helper)."
-  - path: shared/skills/gemini/SKILL.md
-    reason: Same credentials.py probe as chatgpt. Same defer-until-shim disposition.
-  - path: shared/skills/debate/SKILL.md
-    reason: Same credentials.py probe as second-opinion plus a `grep -rl '<surface>' ~/code ~/.claude` instruction that traverses personal directories. Defer until the credential-resolution shim exists and the body is sanitised.
+  # chatgpt/gemini/debate moved to allow.skills on 2026-05-01 (slice C):
+  # the credentials.py probe was replaced with a env → Keychain →
+  # credentials.py fallback resolver that works on both sides.
   - path: shared/skills/screenshot/SKILL.md
     reason: Hardcodes `/Users/timtrailor/Library/CloudStorage/GoogleDrive-tim.trailor@envisso.com/...` as both the instruction-file path and the output directory. Not usable on the work laptop without rewrite.
   - path: shared/skills/printer/
