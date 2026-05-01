@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.timtrailor.work-stale-pr-alert</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>python3</string>
+        <string>/Users/timtrailor/code/claude-bridge/tools/work_stale_pr_alert.py</string>
+    </array>
+
+    <!-- Daily 09:00 check for PRs older than 24h on work repos.
+         Pushes to bridge_push_notification when found. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/work_stale_pr_alert.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/work_stale_pr_alert.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/timtrailor/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/timtrailor</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/timtrailor/code/claude-bridge</string>
+
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>

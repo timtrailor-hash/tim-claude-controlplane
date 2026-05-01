@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.timtrailor.work-memory-indexer</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/timtrailor/code/claude-bridge/tools/work_memory_index_periodic.sh</string>
+    </array>
+
+    <!-- 6-hourly re-index. SessionEnd hook (work_setup.sh Section B) is the
+         hot path; this LaunchAgent guarantees indexing even when the laptop
+         goes long stretches without a new session ending. -->
+    <key>StartInterval</key>
+    <integer>21600</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/work_memory_indexer.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/work_memory_indexer.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/timtrailor/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/timtrailor</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/timtrailor/code/claude-bridge</string>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
