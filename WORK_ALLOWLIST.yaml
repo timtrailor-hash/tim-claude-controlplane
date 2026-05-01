@@ -68,6 +68,33 @@ allow:
     - path: shared/skills/secure-delete/SKILL.md
       reason: "Slice I 2026-05-01: ChromaDB data dir resolved at runtime in env→work_memory_data→personal-side-defaults order. Works on both sides without regression."
 
+  hooks:
+    # Slice E (2026-05-01): nine sanitised hooks deployed by claude-bridge
+    # Section E into ~/.claude/hooks/ on the work laptop and wired into
+    # ~/.claude/settings.json. Personal IPs, /opt/homebrew/bin/python3.11
+    # hardcodes, printer-specific patterns, and personal-only public-repo
+    # entries removed. Pattern-28/30 AST hardening preserved.
+    - path: shared/hooks/audit_log_hook.sh
+      reason: PostToolUse Bash. Logs every shell command + exit code to ~/.claude/audit.log. No personal refs.
+    - path: shared/hooks/commit_guard.sh
+      reason: PreToolUse Bash. Session-trailer + doc-loss + authority-map + ratchet guards. Generic.
+    - path: shared/hooks/commit_quality_hook.sh
+      reason: PreToolUse Bash. Session-trailer + secret-scan + ruff lint on commit body. $BASH_SOURCE-relative scan_command.py invocation.
+    - path: shared/hooks/credential_leak_hook.sh
+      reason: PreToolUse Edit/Write. Generic key regex (sk-, AKIA, ya29., AIza, github_pat_, BEGIN PRIVATE KEY). credentials.py advice replaced with generic gitignored-secrets-file guidance.
+    - path: shared/hooks/git-commit-session-check.sh
+      reason: Lighter alternate Session-trailer enforcer. Pure regex, no paths.
+    - path: shared/hooks/lint_hook.sh
+      reason: PostToolUse Edit/Write. ruff + shellcheck + swiftlint, advisory by default. Pattern-4 safe stdin parsing.
+    - path: shared/hooks/protected_path_hook.sh
+      reason: PreToolUse Bash. AST-walked path protection via scan_command.py. Personal-side printer/SSH/public-repo blocks removed; git push --force ask-gate added in their place.
+    - path: shared/hooks/rename_guard.sh
+      reason: PreToolUse Bash. rm -rf / git mv / mv guard for managed roots. Hardcoded /Users/timtrailor/ replaced with ${HOME}/.
+    - path: shared/hooks/scan_command.py
+      reason: Bashlex AST walker emitting __LA_WRITE__ / __SYS_WRITE__ sentinels. Used by protected_path_hook.sh + commit_quality_hook.sh. python3 shebang.
+    - path: shared/hooks/sensitivity_check.sh
+      reason: /review tier classifier. Conservative path/content patterns retained (printer/klipper/etc. flagged as sensitive — false positives are cheap, false negatives are not). Documented choice (b) inline.
+
   work_topics:
     # Sanitised topic-memory files (slice L1, 2026-05-01). Behavioural feedback
     # rules and the shared work-bridge phase-2 plan. Frontmatter scope: shared,
@@ -131,8 +158,52 @@ deny_explicit:
     reason: printer_policy.yaml (printer IPs/macros) + degraded_modes.yaml (home-network state machine).
   - path: shared/config/printer_config.toml
     reason: Printer config.
-  - path: shared/hooks/
-    reason: All hooks are Mac-Mini-resident daemons or memory/printer-bound. None are useful on the work laptop and most reference local paths.
+  - path: shared/hooks/printer-safety-check.sh
+    reason: Klipper command allowlist gate. Personal-only.
+  - path: shared/hooks/printer_safety.py
+    reason: Klipper safety helpers. Personal-only.
+  - path: shared/hooks/test_printer_safety.py
+    reason: Printer-safety unit tests. Personal-only.
+  - path: shared/hooks/la_turn_hook.sh
+    reason: TerminalApp Live Activity turn counter, depends on personal APNs setup. Defer until work-side LA support exists (would arrive with slice G expansion).
+  - path: shared/hooks/memory_sync_pull.sh
+    reason: Personal-side cross-machine memory git pull. Work side has its own single-machine memory.
+  - path: shared/hooks/memory_sync_push.sh
+    reason: Personal-side cross-machine memory git push. Work side has its own single-machine memory.
+  - path: shared/hooks/memory_commit_push.sh
+    reason: Personal-side memory commit push. Same reason.
+  - path: shared/hooks/memory_index_diff.sh
+    reason: Personal-side memory index diff between two machines. Not applicable on work laptop.
+  - path: shared/hooks/memory_health_check.sh
+    reason: Personal-side memory health probe (path defaults to ~/Documents/Claude code/memory_server_data). Re-add with platform-aware paths after slice E lands.
+  - path: shared/hooks/drift_check.sh
+    reason: Personal-side cross-machine drift check. Deferred to a separate slice (drift-check work-side variant).
+  - path: shared/hooks/drift_check_trigger.sh
+    reason: Same as drift_check.sh.
+  - path: shared/hooks/mcp-health-check.sh
+    reason: Personal-side MCP-list-specific. Re-add after work-side MCP set settles.
+  - path: shared/hooks/config-integrity-check.sh
+    reason: Personal-side settings.json validator with hardcoded MCP server names.
+  - path: shared/hooks/continuous_learning_hook.sh
+    reason: Captures Tim's corrections back to lessons.md. Defer until work-side lessons.md is curated.
+  - path: shared/hooks/continuous_learning.py
+    reason: Same as the hook above.
+  - path: shared/hooks/freeze_mode_hook.sh
+    reason: Personal-side sensitive-file freeze list. Re-add with a work-side freeze list when needed.
+  - path: shared/hooks/freeze_mode_allowed.yaml
+    reason: Same as freeze_mode_hook.sh.
+  - path: shared/hooks/auto_review_hook.sh
+    reason: SessionEnd auto-review tripwire. Personal-side log path; sanitise + re-add in a follow-up.
+  - path: shared/hooks/response_quality_check.py
+    reason: Stop hook (response-gate). Already deployed via reply-style.md PR; not re-allowed via this manifest because it ships with the rules group, not the hooks group.
+  - path: shared/hooks/response_quality_check.sh
+    reason: Wrapper for response_quality_check.py. Same reason.
+  - path: shared/hooks/session_manifest_hook.sh
+    reason: PostToolUse session manifest tracker. Personal-side path defaults; sanitise in a follow-up.
+  - path: shared/hooks/validate_hooks.sh
+    reason: SessionStart hook integrity check. Personal-side settings.json hook list; sanitise + re-add.
+  - path: shared/hooks/verify_host_manifest.sh
+    reason: Host manifest comparator. Personal-side only.
   - path: shared/lib/
     reason: system_map.py / system_inventory.sh / live_acceptance.sh — home infrastructure introspection.
   - path: shared/mcp-launchers/

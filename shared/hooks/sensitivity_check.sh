@@ -20,6 +20,17 @@
 #   2. Diff content: dangerous gcode, sudo, rm -rf, drop table, FIRMWARE_RESTART,
 #      SAVE_CONFIG, KeepAlive, launchctl bootstrap/bootout, secret patterns
 #   3. File-count: ≥10 files changed → architectural
+#
+# Cross-platform note: this script is deployed identically to both the
+# personal-side and work-side hooks dir. The path patterns include
+# personal-side terms (printer/klipper/moonraker/sv08/bambu/snapmaker)
+# that won't normally match anything in a work-side repo. We INTENTIONALLY
+# keep them: the cost of a false positive is a slightly more careful
+# review (cheap), the cost of a false negative is a dangerous change
+# shipping under-reviewed (expensive). Over-cautious is fine; under-
+# cautious is the bug. If/when work-side patterns become known
+# (specific corporate code paths, work LaunchAgent prefixes, work
+# allowlist files) they should be ADDED to the regex, not substituted.
 
 set -uo pipefail
 

@@ -26,7 +26,17 @@ except Exception:
 # happens to mention "git commit" inside a heredoc/quoted string (e.g. when
 # Claude builds a /tmp file containing review context that documents commit
 # semantics). See lessons.md Pattern 28 + scan_command.py.
-SCAN=$(echo "$COMMAND" | /opt/homebrew/bin/python3.11 /Users/timtrailor/.claude/hooks/scan_command.py 2>/dev/null)
+#
+# Resolve scan_command.py relative to this script so it works regardless of
+# whether this hook is deployed under ~/.claude/hooks/ or run from the
+# controlplane checkout. Use python3 from PATH for portability across
+# Homebrew prefixes / Linux CI / different machines.
+SCAN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCAN_PY="$SCAN_DIR/scan_command.py"
+SCAN=""
+if command -v python3 >/dev/null 2>&1 && [ -f "$SCAN_PY" ]; then
+    SCAN=$(echo "$COMMAND" | python3 "$SCAN_PY" 2>/dev/null)
+fi
 [ -z "$SCAN" ] && SCAN="$COMMAND"
 
 if ! echo "$SCAN" | grep -qE '(^|[^a-z])git commit'; then
@@ -36,7 +46,18 @@ fi
 ISSUES=""
 
 # ── (a) Secret scan on staged file content ──
-STAGED_CONTENT=$(git diff --cached --unified=0 2>/dev/null | grep '^\+[^+]' | head -500)
+# Skip paths whose entire purpose is to DEFINE credential-detection patterns
+# (the patterns will look like real secrets to this scanner). Matches the
+# names of the hook source files, the controlplane allowlist, work-topic
+# rule files, and lessons.md (which discusses these patterns by name).
+EXCLUDE_RE='(credential_leak_hook\.sh|commit_quality_hook\.sh|WORK_ALLOWLIST\.yaml|shared/work-topics/lessons\.md|shared/work-topics/quality-toolchain\.md|shared/work-topics/credentials-keychain-work\.md)'
+STAGED_FILES_KEEP=$(git diff --cached --name-only 2>/dev/null | grep -vE "$EXCLUDE_RE" | tr '\n' ' ')
+if [ -n "$STAGED_FILES_KEEP" ]; then
+    # shellcheck disable=SC2086
+    STAGED_CONTENT=$(git diff --cached --unified=0 -- $STAGED_FILES_KEEP 2>/dev/null | grep '^\+[^+]' | head -500)
+else
+    STAGED_CONTENT=""
+fi
 
 if [ -n "$STAGED_CONTENT" ]; then
     while IFS= read -r pat; do

@@ -60,8 +60,11 @@ if [ -z "$TARGET" ] && MATCH=$(echo "$COMMAND" | grep -oE 'git mv ([^ ]+) ([^ &;
     VERB="git mv"
 fi
 
-# Pattern 3: mv <src> <dst> where src is absolute and inside managed dirs
-if [ -z "$TARGET" ] && MATCH=$(echo "$COMMAND" | grep -oE 'mv (/Users/timtrailor/[^ ]+) ([^ &;]+)' | head -1); then
+# Pattern 3: mv <src> <dst> where src is absolute and inside the user's
+# home directory. We only care about absolute paths under $HOME because
+# the case-statement below further filters to managed roots
+# (~/code, ~/.claude, etc.).
+if [ -z "$TARGET" ] && MATCH=$(echo "$COMMAND" | grep -oE "mv (${HOME}/[^ ]+) ([^ &;]+)" | head -1); then
     TARGET=$(echo "$MATCH" | awk '{print $2}')
     VERB="mv"
 fi

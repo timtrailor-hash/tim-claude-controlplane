@@ -50,12 +50,23 @@ if [ -z "$CONTENT" ]; then
     exit 0
 fi
 
-# Check for credential-like patterns
-if echo "$CONTENT" | grep -qiE '(sk-[a-zA-Z0-9]{20,}|ANTHROPIC_API_KEY|api[_-]?key\s*[=:]\s*["\x27][a-zA-Z0-9]{20,}|password\s*[=:]\s*["\x27][^\s]{8,}|BEGIN (RSA |EC )?PRIVATE KEY|access_code\s*[=:]\s*["\x27][0-9]{6,})'; then
+# Check for credential-like patterns. Generic key formats only — no
+# personal-side example values baked in.
+#   sk-…                — Anthropic / OpenAI style API keys
+#   sk-ant-…            — Anthropic-prefixed API keys
+#   AKIA…               — AWS access keys
+#   AIza…               — Google API keys
+#   ya29.…              — Google OAuth access tokens
+#   github_pat_…        — GitHub fine-grained PATs
+#   ghp_… / gho_…       — GitHub classic / OAuth tokens
+#   xoxb-… / xoxp-…     — Slack tokens
+#   BEGIN PRIVATE KEY   — PEM-encoded private keys (RSA/EC/DSA/OPENSSH)
+#   api_key/password=…  — generic literal-secret patterns in code
+if echo "$CONTENT" | grep -qiE '(sk-(ant-)?[a-zA-Z0-9_-]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|ya29\.[0-9A-Za-z_-]{20,}|github_pat_[0-9A-Za-z_]{22,}|ghp_[a-zA-Z0-9]{36}|gho_[a-zA-Z0-9]{36}|xox[bp]-[0-9]{10,}-[0-9]{10,}-[a-zA-Z0-9]{24}|ANTHROPIC_API_KEY|api[_-]?key\s*[=:]\s*["\x27][a-zA-Z0-9]{20,}|password\s*[=:]\s*["\x27][^\s]{8,}|BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY|access_code\s*[=:]\s*["\x27][0-9]{6,})'; then
     echo "WARNING: Content appears to contain credentials or API keys."
     echo "File: $FILE_PATH"
-    echo "This file is tracked by git and may be pushed to a public repo."
-    echo "Use credentials.py (gitignored) for secrets instead."
+    echo "This file is tracked by git and may be pushed to a remote repo."
+    echo "Use a gitignored secrets file or environment variables instead."
     exit 2
 fi
 
