@@ -1,0 +1,114 @@
+# Work Laptop System Map — load-bearing paths and their owners.
+# Source-of-truth for where every script, hook, and config lives on the work
+# laptop after work_setup.sh deploys.
+#
+# Anything not in this map and yet present on the work laptop is unmanaged drift.
+
+machine:
+  name: work-laptop
+  hostname_pattern: "*"            # corporate-issued; work_setup.sh writes ~/.claude/.work-laptop marker
+  marker_file: ~/.claude/.work-laptop
+  user_home: $HOME
+  controlplane_root: $HOME/code/tim-claude-controlplane
+  bridge_root: $HOME/code/claude-bridge
+
+paths:
+  rules:
+    location: $HOME/.claude/rules/
+    source: $controlplane_root/shared/rules/
+    deployed_via: deploy.sh (rules group)
+    files: [reply-style.md, security.md]   # operational.md, infrastructure.md NOT deployed (deny_explicit on work side)
+
+  hooks:
+    location: $HOME/.claude/hooks/
+    source: $controlplane_root/shared/hooks/
+    deployed_via: claude-bridge/tools/work_setup.sh Section E
+    files:
+      - audit_log_hook.sh
+      - commit_guard.sh
+      - commit_quality_hook.sh
+      - credential_leak_hook.sh
+      - git-commit-session-check.sh
+      - lint_hook.sh
+      - protected_path_hook.sh
+      - rename_guard.sh
+      - scan_command.py
+      - sensitivity_check.sh
+      - response_quality_check.py    # deployed via reply-style.md PR
+      - response_quality_check.sh    # deployed via reply-style.md PR
+
+  agents:
+    location: $HOME/.claude/agents/
+    source: $controlplane_root/shared/agents/
+    deployed_via: materialiser (work_setup.sh Section C, future)
+    files: [code-reviewer.md, architect-auditor.md, silent-failure-hunter.md, second-opinion.md]
+
+  skills:
+    location: $HOME/.claude/skills/
+    source: $controlplane_root/shared/skills/
+    deployed_via: materialiser (work_setup.sh Section C, future)
+    files:
+      - chatgpt/SKILL.md
+      - gemini/SKILL.md
+      - debate/SKILL.md
+      - review/SKILL.md
+      - lessons-check/SKILL.md
+      - memory/SKILL.md
+      - compliance/SKILL.md
+      - secure-delete/SKILL.md
+
+  topics:
+    location: $HOME/.claude/projects/<id>/memory/topics/
+    source: $controlplane_root/shared/work-topics/
+    deployed_via: claude-bridge/tools/work_setup.sh Section L
+    seeded_for: every existing project dir; first-ever setup seeds ~/.claude/projects/-Users-<username>-code/
+
+  bridge_data:
+    location: $HOME/.claude/work_memory_data/
+    source: built locally
+    deployed_via: claude-bridge/tools/work_memory_server.py (created on first index)
+    contents:
+      - chroma/        # ChromaDB vector store
+      - fts.db         # SQLite FTS5
+      - auto_index.log
+
+  audit_logs:
+    location: $HOME/.claude/
+    source: built locally
+    deployed_via: hooks at runtime
+    files:
+      - audit.log
+      - lint_findings.log
+      - response_gate_violations.log
+      - work_services_audit.log
+
+mcp_servers:
+  registered_in: $HOME/.claude.json
+  servers:
+    - bridge: stdio → python3 $bridge_root/tools/work_mcp_server.py
+    - memory_work: stdio → python3 $bridge_root/tools/work_memory_server.py
+
+environment_variables:
+  CONV_MEMORY_DATA_DIR: $HOME/.claude/work_memory_data
+  CONV_MEMORY_TRANSCRIPTS_DIR: $HOME/.claude/projects
+
+keychain_entries:
+  service: tim-credentials
+  account_prefix_for_work: WORK_
+  required_for_full_function:
+    - WORK_OPENAI_API_KEY        # /chatgpt, /debate, /review (slice D, Tim manual)
+    - WORK_GEMINI_API_KEY        # /gemini, /debate, /review (slice D, Tim manual)
+    - WORK_GITHUB_TOKEN          # github MCP, gh CLI (slice K, Tim manual)
+    - WORK_PERPLEXITY_API_KEY    # perplexity MCP (slice K, Tim manual)
+    - WORK_FIRECRAWL_API_KEY     # firecrawl MCP (slice K, Tim manual)
+    - BRIDGE_AGE_PRIVKEY_WORK    # bridge response decryption (set during initial bootstrap)
+
+what_is_NOT_on_this_machine:
+  - printer-related scripts (sv08-print-tools, printer_daemon.py, printer-safety hooks)
+  - governors / Castle Federation Streamlit
+  - autofaizal pipelines
+  - ofsted-agent
+  - bgt-date-monitor
+  - personal Tailscale daemon (corporate VPN policy)
+  - Mac Mini SSH targets
+  - Personal SMTP credentials (work uses bridge_send_email_self instead)

@@ -1,0 +1,23 @@
+{
+    "_comment": "Work-laptop ~/.claude/settings.json template. deploy.sh copies this to ~/.claude/settings.json on the work laptop and merges it with the bridge / memory-work MCP entries that work_setup.sh wires in.",
+    "permissions": {
+        "allow": [
+            "Bash",
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep",
+            "WebFetch",
+            "WebSearch",
+            "mcp__bridge",
+            "mcp__memory_work"
+        ],
+        "additionalDirectories": [
+            "$HOME/code"
+        ]
+    },
+    "hooks": {
+        "_comment_hooks": "PreToolUse and PostToolUse entries are written by claude-bridge/tools/work_setup.sh Section E. Don't hand-edit; rerun work_setup.sh to refresh. The Stop hook (response_quality_check) ships via the reply-style.md rule materialiser."
+    }
+}
