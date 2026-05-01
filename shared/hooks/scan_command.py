@@ -381,7 +381,10 @@ def _scan(cmd: str) -> str:
     try:
         import bashlex
     except ImportError:
-        return cmd
+        # Pattern-32 fix: without bashlex, at least strip quoted-heredoc
+        # bodies so commit messages mentioning "launchctl bootstrap" etc.
+        # don't trigger protected_path_hook false positives.
+        return _strip_quoted_heredocs(cmd)
     pre = _strip_quoted_heredocs(cmd)
     try:
         trees = bashlex.parse(pre)
