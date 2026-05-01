@@ -12,7 +12,7 @@
     <key>RunAtLoad</key>
     <true/>
     <key>StartInterval</key>
-    <integer>600</integer>
+    <integer>180</integer>
     <key>StandardOutPath</key>
     <string>/tmp/bgt_date_monitor_stdout.log</string>
     <key>StandardErrorPath</key>

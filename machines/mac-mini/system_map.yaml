@@ -248,7 +248,7 @@ services:
     label: com.timtrailor.bgt-date-monitor
     purpose: "BGT ticket date monitoring"
     owner: bgt_date_monitor.py
-    mode: StartInterval 600
+    mode: StartInterval 180
     code: ~/code/bgt_date_monitor.py
     secrets: []
     failure_mode: LOW
@@ -257,7 +257,7 @@ services:
       type: file_age
       path: /Users/timtrailor/code/.bgt_known_dates.json
       max_age_hours: 1
-    notes: "StartInterval — not continuously running; probe the output state file instead. Evaluate: 10-min polling necessary?"
+    notes: "StartInterval — not continuously running; probe the output state file instead. 3-minute polling confirmed canonical 2026-05-01."
 
   stale-pr-alert:
     label: com.timtrailor.stale-pr-alert

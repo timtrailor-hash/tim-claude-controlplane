@@ -110,13 +110,13 @@ services:
   bgt-date-monitor:
     purpose: "BGT ticket date monitoring"
     owner: bgt_date_monitor.py
-    mode: StartInterval 600
+    mode: StartInterval 180
     python: /opt/homebrew/bin/python3.11
     code: ~/code/bgt_date_monitor.py
     secrets: []
     failure_mode: "LOW — ticket alert delayed"
     auto_fix: false
-    notes: "Evaluate: 10-min polling necessary? Consider webhook or hourly."
+    notes: "3-minute polling. Tim's chosen interval (was 600 in controlplane, drifted to 180 in live; 180 confirmed canonical 2026-05-01)."
 
   stale-pr-alert:
     purpose: "Detect PRs open >24h; auto-merge if safety gate passes (CLEAN, MERGEABLE, checks SUCCESS, Claude-authored), email otherwise"
