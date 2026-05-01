@@ -37,6 +37,8 @@ allow:
   rules:
     - path: shared/rules/security.md
       reason: API-key handling, repo hygiene rules, auth-helper backup pattern. Generic.
+    - path: shared/rules/reply-style.md
+      reason: "CEO + ADHD reply rules. Em-dash scoped to external output, max-3-questions per reply, no time estimates, no deferral phrases. Generic, no personal refs. Added 2026-05-01 after Tim asked both systems to share the guidance."
 
   agents:
     - path: shared/agents/silent-failure-hunter.md

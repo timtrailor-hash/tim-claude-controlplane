@@ -19,6 +19,10 @@ What Tim does NOT decide:
 
 If you find yourself drafting a message that ends "OK to commit?" or "Want me to merge?" or "Should I push?" — STOP. The answer is yes by default. The /review skill handles commit + push + PR + merge autonomously on APPROVE. Use it.
 
+## Reply style and em-dash rule
+
+See `shared/rules/reply-style.md` for the CEO + ADHD reply rules (max 3 questions, no time estimates, no deferral phrases) and the scoped em-dash rule (terminal exempt, external output banned). Loaded on both personal and work side.
+
 ## Plan Mode Triggers
 Enter plan mode (write out the plan, confirm before implementing) for:
 - Any change to daemons, LaunchAgents, or automated processes
@@ -39,7 +43,7 @@ Before telling Tim something can't be done, or asking him to do something himsel
 2. Search session JSONL logs for keywords (memory MCP `search_exact`)
 3. Check if the tool/file/path actually exists right now (don't assume from memory)
 4. Attempt the simplest version first
-5. Can I SSH to Mac Mini and do it there? (`ssh timtrailor@100.126.253.40`)
+5. Can a peer machine do this? Personal-side: see `topics/infrastructure-personal.md` for the Mac Mini SSH target. Work-side: prefer the bridge gateway over outbound SSH; corporate networks block Tailscale and DLP/EDR will flag it.
 6. Can I use a tool I haven't tried yet?
 7. Can I spawn a subagent to do this independently?
 

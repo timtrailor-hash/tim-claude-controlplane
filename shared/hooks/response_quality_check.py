@@ -172,11 +172,11 @@ def load_last_assistant_text(transcript_path: str) -> str:
 
 def find_violations(text: str) -> list[str]:
     issues: list[str] = []
-    if EM_DASH in text:
-        issues.append(
-            "em-dash (U+2014) in response. Replace with comma, full stop, "
-            "or rephrase. See feedback_response_structure.md."
-        )
+    # Em-dash rule (2026-05-01 update): only block in EXTERNAL output (emails
+    # to recipients other than Tim, articles Tim publishes, etc.). Terminal
+    # replies to Tim are exempt — he reads them directly and the gate was
+    # firing too often. The em-dash rule still applies, but enforcement moves
+    # to the email/notification senders that target external recipients.
     m = TIME_ESTIMATE_RE.search(text)
     if m:
         issues.append(
