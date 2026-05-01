@@ -177,13 +177,40 @@ Round 1+: Each model sees all others' previous positions."""
 import json, urllib.request, sys, os, threading, re, time
 from collections import Counter
 
-# Machine-aware credentials
-for cand in ("~/code", "~/Documents/Claude code"):
-    p = os.path.expanduser(cand)
-    if os.path.exists(os.path.join(p, "credentials.py")):
-        sys.path.insert(0, p)
-        break
-from credentials import GEMINI_API_KEY, OPENAI_API_KEY
+# Resolve GEMINI_API_KEY + OPENAI_API_KEY from (in order):
+#   1. Env vars (covers ~/.claude.json --env wiring)
+#   2. macOS Keychain WORK_* accounts (work side)
+#   3. macOS Keychain personal accounts
+#   4. credentials.py legacy probe (personal side disk)
+import subprocess
+
+def _resolve(env_name, work_acct, personal_acct):
+    val = os.environ.get(env_name)
+    if val:
+        return val
+    for acct in (work_acct, personal_acct):
+        r = subprocess.run(
+            ["security", "find-generic-password",
+             "-a", acct, "-s", "tim-credentials", "-w"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    return None
+
+GEMINI_API_KEY = _resolve("GEMINI_API_KEY", "WORK_GEMINI_API_KEY", "GEMINI_API_KEY")
+OPENAI_API_KEY = _resolve("OPENAI_API_KEY", "WORK_OPENAI_API_KEY", "OPENAI_API_KEY")
+if not (GEMINI_API_KEY and OPENAI_API_KEY):
+    for cand in ("~/code", "~/Documents/Claude code"):
+        p = os.path.expanduser(cand)
+        if os.path.exists(os.path.join(p, "credentials.py")):
+            sys.path.insert(0, p)
+            from credentials import GEMINI_API_KEY as _GK, OPENAI_API_KEY as _OK
+            GEMINI_API_KEY = GEMINI_API_KEY or _GK
+            OPENAI_API_KEY = OPENAI_API_KEY or _OK
+            break
+if not (GEMINI_API_KEY and OPENAI_API_KEY):
+    raise RuntimeError("Gemini or OpenAI key not found in env, keychain, or credentials.py")
 
 ROUND = int(os.environ.get("DEBATE_ROUND", "0"))
 TIER = os.environ.get("DEBATE_TIER", "full")

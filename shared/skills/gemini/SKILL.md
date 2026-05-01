@@ -53,13 +53,30 @@ For custom reviews, construct a prompt for Gemini with:
 ```python
 import json, urllib.request, os, sys
 
-# Machine-aware credentials path: try Mac Mini layout first, then laptop
-for cand in ("~/code", "~/Documents/Claude code"):
-    p = os.path.expanduser(cand)
-    if os.path.exists(os.path.join(p, "credentials.py")):
-        sys.path.insert(0, p)
-        break
-from credentials import GEMINI_API_KEY
+# Resolve GEMINI_API_KEY from (in order): env var, work-side Keychain
+# (WORK_GEMINI_API_KEY), personal-side Keychain (GEMINI_API_KEY), then
+# the legacy credentials.py disk probe. Works on both sides.
+import subprocess
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    for acct in ("WORK_GEMINI_API_KEY", "GEMINI_API_KEY"):
+        r = subprocess.run(
+            ["security", "find-generic-password",
+             "-a", acct, "-s", "tim-credentials", "-w"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            GEMINI_API_KEY = r.stdout.strip()
+            break
+if not GEMINI_API_KEY:
+    for cand in ("~/code", "~/Documents/Claude code"):
+        p = os.path.expanduser(cand)
+        if os.path.exists(os.path.join(p, "credentials.py")):
+            sys.path.insert(0, p)
+            from credentials import GEMINI_API_KEY
+            break
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_API_KEY not found in env, keychain, or credentials.py")
 
 def ask_gemini(prompt, context=""):
     """Send a review request to Gemini 2.5 Pro. Falls back to Flash if Pro unavailable."""

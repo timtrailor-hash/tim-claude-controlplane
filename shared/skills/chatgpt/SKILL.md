@@ -68,13 +68,30 @@ YOUR JOB:
 ```python
 import json, urllib.request, sys, os
 
-# Machine-aware credentials path
-for cand in ("~/code", "~/Documents/Claude code"):
-    p = os.path.expanduser(cand)
-    if os.path.exists(os.path.join(p, "credentials.py")):
-        sys.path.insert(0, p)
-        break
-from credentials import OPENAI_API_KEY
+# Resolve OPENAI_API_KEY from (in order): env var, work-side Keychain
+# (WORK_OPENAI_API_KEY), personal-side Keychain (OPENAI_API_KEY), then
+# the legacy credentials.py disk probe. Works on both sides.
+import subprocess
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    for acct in ("WORK_OPENAI_API_KEY", "OPENAI_API_KEY"):
+        r = subprocess.run(
+            ["security", "find-generic-password",
+             "-a", acct, "-s", "tim-credentials", "-w"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            OPENAI_API_KEY = r.stdout.strip()
+            break
+if not OPENAI_API_KEY:
+    for cand in ("~/code", "~/Documents/Claude code"):
+        p = os.path.expanduser(cand)
+        if os.path.exists(os.path.join(p, "credentials.py")):
+            sys.path.insert(0, p)
+            from credentials import OPENAI_API_KEY
+            break
+if not OPENAI_API_KEY:
+    raise RuntimeError("OPENAI_API_KEY not found in env, keychain, or credentials.py")
 
 def ask_chatgpt(prompt, model="gpt-5.4-mini"):
     """Send a review request to GPT-5.4. Falls back to mini if full is unavailable."""
