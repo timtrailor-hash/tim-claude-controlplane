@@ -444,6 +444,41 @@ if [ "$MACHINE" = "mac-mini" ] && [ -d "$MACHINE_DIR/local-bin" ]; then
     fi
 fi
 
+# Mac Mini only: docs that have a known live home outside the repo. Same
+# atomic-rename swap as daemons/local-bin. Currently just DISASTER_RECOVERY.md
+# at ~/code/. Extend the case-statement when more docs need a stable
+# live path.
+if [ "$MACHINE" = "mac-mini" ] && [ -d "$REPO_DIR/docs" ]; then
+    for src in "$REPO_DIR/docs"/*.md; do
+        [ -f "$src" ] || continue
+        name=$(basename "$src")
+        case "$name" in
+            DISASTER_RECOVERY.md) live="$HOME/code/$name" ;;
+            *) continue ;;
+        esac
+        if [ -L "$live" ] && [ "$(readlink "$live")" = "$src" ]; then
+            continue
+        fi
+        if [ -d "$live" ] && [ ! -L "$live" ]; then
+            echo "  doc/$name: ABORT — $live is a directory, refusing to overwrite"
+            auto_rollback
+        fi
+        if [ "$DRY_RUN" = "1" ]; then
+            if [ -e "$live" ] && [ ! -L "$live" ]; then
+                echo "  doc/$name: WOULD replace file with symlink → $src"
+            else
+                echo "  doc/$name: WOULD link → $src"
+            fi
+            continue
+        fi
+        tmp="${live}.deploy-tmp.$$"
+        ln -s "$src" "$tmp"
+        mv -f "$tmp" "$live"
+        echo "  doc/$name: linked → $src"
+        CHANGES=1
+    done
+fi
+
 # Mac Mini only: apply LaunchAgents
 if [ "$MACHINE" = "mac-mini" ] && [ -d "$MACHINE_DIR/launchagents" ]; then
     for plist in "$MACHINE_DIR/launchagents"/*.plist; do
