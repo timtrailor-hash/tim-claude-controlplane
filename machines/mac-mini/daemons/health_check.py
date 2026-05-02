@@ -545,8 +545,47 @@ def check_cross_device_consistency():
             else:
                 add("sync:memory_git", "PASS", f"both at {local_head[:8]}")
         else:
-            add("sync:memory_git", "WARN",
-                f"diverged — local {local_head[:8]} vs remote {remote_head[:8]}")
+            # Classify the divergence rather than blanket-WARNing.
+            # See auto-rca-inbox alert_id 110a6544a625 (2026-05-01) — repeated
+            # false-positives because ahead-only / behind-only / true-fork all
+            # collapsed to 'diverged'.
+            try:
+                subprocess.check_output(
+                    ["git", "-C", str(local_memory), "fetch", "--quiet", "origin", "main"],
+                    stderr=subprocess.DEVNULL, timeout=10,
+                )
+                merge_base = subprocess.check_output(
+                    ["git", "-C", str(local_memory), "merge-base", local_head, remote_head],
+                    text=True, stderr=subprocess.DEVNULL, timeout=5,
+                ).strip()
+            except Exception:
+                merge_base = ""
+
+            if merge_base == remote_head:
+                # Laptop strictly behind; will catch up on next SessionStart.
+                # Grace: only WARN if it has stayed behind for >6h (genuine staleness).
+                last_session = 0
+                try:
+                    last_session = int(subprocess.check_output(
+                        ["ssh"] + SSH_OPTS + [remote,
+                         f"stat -f %m {remote_memory}/.git/FETCH_HEAD 2>/dev/null || echo 0"],
+                        text=True, timeout=10,
+                    ).strip() or "0")
+                except Exception:
+                    pass
+                age_h = (time.time() - last_session) / 3600 if last_session else 999
+                if age_h > 6:
+                    add("sync:memory_git", "WARN",
+                        f"laptop {remote_head[:8]} behind {local_head[:8]} for {age_h:.1f}h")
+                else:
+                    add("sync:memory_git", "PASS",
+                        f"laptop behind by {local_head[:8]} (will pull on next session, {age_h:.1f}h)")
+            elif merge_base == local_head:
+                add("sync:memory_git", "PASS",
+                    f"laptop ahead at {remote_head[:8]} (Mac Mini will pull next session)")
+            else:
+                add("sync:memory_git", "WARN",
+                    f"true divergence — local {local_head[:8]} vs remote {remote_head[:8]} (need merge)")
     except subprocess.TimeoutExpired:
         add("sync:memory_git", "PASS", "laptop unreachable (expected)")
     except Exception as e:
