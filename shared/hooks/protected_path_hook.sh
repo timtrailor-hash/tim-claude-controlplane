@@ -22,22 +22,96 @@ if echo "$COMMAND" | grep -qE '^(ssh |scp )'; then
     exit 0
 fi
 
-# Pattern-33 fix: truly read-only, SIMPLE commands cannot modify anything
-# this hook protects. But only bypass if the command has NO redirect operators,
-# pipes, semicolons, or && — any of those could route output to a protected
-# path or chain a dangerous command after a safe one.
-if ! echo "$COMMAND" | grep -qE '[>|;&]'; then
-    FIRST_VERB=$(echo "$COMMAND" | sed 's/^cd [^[:space:]]*[[:space:]]*//' | awk '{print $1}')
-    case "$FIRST_VERB" in
-        cat|head|tail|less|more|grep|rg|wc|file|stat|ls|diff|strings|xxd|od|hexdump|readlink|realpath|basename|dirname|test|true|false|type|which|id|whoami|date|uname|sw_vers|df|du|uptime|ps|pgrep|lsof|netstat|dig|nslookup|host|ping|traceroute|jq|yq|printenv)
-            exit 0 ;;
+# Pattern-34 fix: read-only command bypass that handles pipes, chains, and
+# multi-line commands. Previous Pattern-33 bypass rejected any command with
+# |, &, or ; — causing false positives on safe patterns like `grep foo |
+# head -5` or `cd dir && git diff`. Now: split on &&, ||, ;, pipe, newline
+# and check whether EVERY segment is a known-safe read-only verb. Only if a
+# redirect (>) is present do we skip the bypass entirely.
+#
+# Pipe splitting uses ' | ' (with spaces) to avoid matching \| inside grep
+# patterns or || in conditionals (|| is split separately).
+_is_safe_verb() {
+    local verb="$1" second="$2" third="$3"
+    case "$verb" in
+        cat|head|tail|less|more|grep|rg|egrep|fgrep|wc|file|stat|ls|diff|strings|xxd|od|hexdump|readlink|realpath|basename|dirname|test|true|false|type|which|id|whoami|date|uname|sw_vers|df|du|uptime|ps|pgrep|lsof|netstat|dig|nslookup|host|ping|traceroute|jq|yq|printenv|echo|printf|sleep|sort|uniq|cut|tr|expr|bc|md5|shasum|sha256sum|md5sum|column|fmt|fold|expand|unexpand|rev|nl|comm|join|paste|tsort|seq|shuf)
+            return 0 ;;
         git)
-            SECOND_WORD=$(echo "$COMMAND" | sed 's/^cd [^[:space:]]*[[:space:]]*//' | awk '{print $2}')
-            case "$SECOND_WORD" in
-                add|status|diff|log|show|blame|branch|remote|fetch|stash|rev-parse|config|check-ignore|ls-files|ls-tree|shortlog|reflog|describe|name-rev|for-each-ref)
-                    exit 0 ;;
+            # NOTE: `git add` mutates the index, so it is not strictly
+            # read-only. It is kept in this list as a workflow exception
+            # because removing it re-triggers Pattern-33 false positives
+            # on laptops without bashlex (where scan_command.py falls back
+            # to regex over command args, including filenames like
+            # `credential_leak_hook.sh` that grep as protected paths).
+            # Index-level writes do not touch protected filesystem paths,
+            # so the security model is preserved.
+            case "$second" in
+                add|status|diff|log|show|blame|branch|remote|fetch|rev-parse|config|check-ignore|ls-files|ls-tree|shortlog|reflog|describe|name-rev|for-each-ref|merge-base)
+                    return 0 ;;
+            esac ;;
+        cd|pushd|popd)
+            return 0 ;;
+        gh)
+            # third already set by caller
+            case "$second" in
+                browse|search|status)
+                    return 0 ;;
+                pr)
+                    case "$third" in view|list|diff|checks|status|"") return 0 ;; esac ;;
+                issue)
+                    case "$third" in view|list|status|"") return 0 ;; esac ;;
+                repo)
+                    # `gh repo clone` writes to disk — exclude from read-only
+                    # bypass. Keep view/list (read-only).
+                    case "$third" in view|list|"") return 0 ;; esac ;;
+                release)
+                    case "$third" in view|list|"") return 0 ;; esac ;;
+                label)
+                    case "$third" in list|"") return 0 ;; esac ;;
+                gist)
+                    case "$third" in view|list|"") return 0 ;; esac ;;
+                run)
+                    case "$third" in view|list|"") return 0 ;; esac ;;
             esac ;;
     esac
+    return 1
+}
+
+if ! echo "$COMMAND" | grep -qE '[>]' \
+    && ! echo "$COMMAND" | grep -qE '\$\(|`' \
+    && ! echo "$COMMAND" | grep -qF '<('; then
+    ALL_SAFE=true
+    # Split: && and || first (multi-char), then ; and newline, then pipe
+    # (space-padded to avoid matching \| inside grep patterns).
+    _SPLIT=$(echo "$COMMAND" | sed 's/ && /\n/g; s/ || /\n/g; s/;/\n/g; s/ | /\n/g')
+    while IFS= read -r _seg; do
+        _seg=$(echo "$_seg" | sed 's/^[[:space:]]*//')
+        [ -z "$_seg" ] && continue
+        # Residual metacharacter check: if segment still contains unescaped
+        # |, &&, or || after splitting, it was a spaceless operator (e.g.
+        # echo foo|rm or cd dir&&rm). Fall through to full scan.
+        _stripped=$(echo "$_seg" | sed 's/\\|//g')
+        if echo "$_stripped" | grep -qF '|'; then
+            ALL_SAFE=false; break
+        fi
+        if echo "$_seg" | grep -qF '&&'; then
+            ALL_SAFE=false; break
+        fi
+        if echo "$_seg" | grep -qF '||'; then
+            ALL_SAFE=false; break
+        fi
+        _verb=$(echo "$_seg" | awk '{print $1}')
+        _second=$(echo "$_seg" | awk '{print $2}')
+        _third=$(echo "$_seg" | awk '{print $3}')
+        [ -z "$_verb" ] && continue
+        if ! _is_safe_verb "$_verb" "$_second" "$_third"; then
+            ALL_SAFE=false
+            break
+        fi
+    done <<< "$_SPLIT"
+    if [ "$ALL_SAFE" = true ]; then
+        exit 0
+    fi
 fi
 
 # scan_command.py: strip data tokens (commit bodies, quoted heredocs).

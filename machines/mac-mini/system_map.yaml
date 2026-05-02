@@ -259,6 +259,23 @@ services:
       max_age_hours: 1
     notes: "StartInterval — not continuously running; probe the output state file instead. 3-minute polling confirmed canonical 2026-05-01."
 
+  stale-wip-alert:
+    label: com.timtrailor.stale-wip-alert
+    purpose: "Detect stale WIP: tracked uncommitted changes (working tree or index) older than 24h, or local branches with no unique commits vs origin/main"
+    owner: stale_wip_alert.py
+    mode: StartInterval 21600
+    code: ~/code/tim-claude-controlplane/machines/mac-mini/daemons/stale_wip_alert.py
+    secrets:
+      - SMTP_USER
+      - SMTP_PASS
+    failure_mode: LOW
+    failure_impact: "stale WIP detection paused; no runtime impact"
+    probe:
+      type: file_age
+      path: /tmp/stale_wip_alert.log
+      max_age_hours: 14
+    notes: "Pattern 34 enforcement. Dedup state at ~/Library/Application Support/stale_wip_alert/state.json — alerts only on changed issue set or after 24h. max_age_hours=14 = interval(6h)*2 + 2h buffer to absorb a single skipped run."
+
   stale-pr-alert:
     label: com.timtrailor.stale-pr-alert
     purpose: "Detect PRs open >24h, auto-merge if safety gate passes, email otherwise"
