@@ -144,6 +144,94 @@ print(json.dumps({
     exit 0
 }
 
+deny_decision() {
+    "${PYTHON_BIN:-python3}" -c "
+import json, sys
+print(json.dumps({
+    'hookSpecificOutput': {
+        'hookEventName': 'PreToolUse',
+        'permissionDecision': 'deny',
+        'permissionDecisionReason': sys.argv[1]
+    }
+}))" "$1"
+    exit 0
+}
+
+# ── Four-tier classifier — primary dispatch (Pattern 36) ─────────────────
+# Runs BEFORE the legacy Pattern 1-7 detectors so T2 (catastrophic) wins
+# over T4 (ask) on overlapping commands like force-push-to-main: T2 says
+# DENY, Pattern 7 would have said ASK. T2 must be authoritative.
+#   T1 → fall through to Pattern 1-7 (which themselves end with exit 0)
+#   T2 → permissionDecision: deny — never run, never ask
+#   T3 → invoke tier3_reviewer.py (subscription-Claude APPROVE/BLOCK/ASK)
+#   T4 → permissionDecision: ask — Tim must tap
+# Failure mode: classifier or reviewer error → fall through to Pattern 1-7
+# (legacy semantics; never silently block legit work).
+CLASSIFIER_PY="$SCAN_DIR/tier_classifier.py"
+REVIEWER_PY="$SCAN_DIR/tier3_reviewer.py"
+if [ -n "$PYTHON_BIN" ] && [ -f "$CLASSIFIER_PY" ]; then
+    CLASSIFIER_INPUT=$(echo "$INPUT" | "$PYTHON_BIN" -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    d = {}
+d['scan_sentinels'] = sys.argv[1] if len(sys.argv) > 1 else ''
+print(json.dumps(d))
+" "$SCAN" 2>/dev/null)
+
+    if [ -n "$CLASSIFIER_INPUT" ]; then
+        CLASSIFIER_OUT=$(echo "$CLASSIFIER_INPUT" | "$PYTHON_BIN" "$CLASSIFIER_PY" 2>/dev/null)
+        TIER=$(echo "$CLASSIFIER_OUT" | "$PYTHON_BIN" -c "
+import json, sys
+try:
+    print(json.load(sys.stdin).get('tier', ''))
+except Exception:
+    print('')
+" 2>/dev/null)
+        REASON=$(echo "$CLASSIFIER_OUT" | "$PYTHON_BIN" -c "
+import json, sys
+try:
+    print(json.load(sys.stdin).get('reason', ''))
+except Exception:
+    print('')
+" 2>/dev/null)
+
+        case "$TIER" in
+            T2)
+                deny_decision "[T2 auto-deny] $REASON" ;;
+            T4)
+                ask "[T4 needs your tap] $REASON" ;;
+            T3)
+                if [ -f "$REVIEWER_PY" ]; then
+                    REVIEWER_INPUT=$(echo "$CLASSIFIER_INPUT" | "$PYTHON_BIN" -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    d = {}
+d['classifier_reason'] = sys.argv[1] if len(sys.argv) > 1 else ''
+print(json.dumps(d))
+" "$REASON" 2>/dev/null)
+                    REVIEWER_OUT=$(echo "$REVIEWER_INPUT" | "$PYTHON_BIN" "$REVIEWER_PY" 2>/dev/null)
+                    if [ -n "$REVIEWER_OUT" ]; then
+                        echo "$REVIEWER_OUT"
+                        exit 0
+                    fi
+                    # Empty output = APPROVE → fall through to Pattern 1-7
+                    # (which will then exit 0 since they're guards, not allow-rules).
+                fi
+                ;;
+            T1|"")
+                : ;;
+        esac
+    fi
+fi
+
+# ── Legacy Pattern 1-7 detectors (safety net) ────────────────────────────
+# Kept as a fallback in case the classifier missed a case OR the classifier
+# subprocess failed silently. They emit "ask" via the function above.
+
 # Pattern 1: WRITE to a LaunchAgent/LaunchDaemon plist.
 if echo "$SCAN" | grep -q '__LA_WRITE__'; then
     ask "Command writes to LaunchAgent/LaunchDaemon plist. Approve to proceed."
