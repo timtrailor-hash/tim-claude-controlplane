@@ -4,10 +4,15 @@
 Detects two conditions in the controlplane repo that indicate abandoned
 work-in-progress:
 
-1. Uncommitted tracked changes (working tree OR index) whose last-commit
-   time is older than 24 hours.
-2. Local branch with no unique commits relative to origin/main (i.e. fully
-   merged or content-identical to main but never deleted).
+1. Tracked files diverged from HEAD (working tree OR index) whose last
+   commit time is older than 24 hours.
+2. Local branches with zero unique commits vs origin/main (i.e. fully
+   ancestor-merged into main and safe to delete).
+
+NOTE: condition 2 detects ancestor-merged branches only. A branch that
+re-implements main with different commits but the same tree content is
+NOT flagged — that pattern often represents legitimate parallel work and
+gets too many false positives.
 
 When either is found, sends an email alert to Tim — but only if the issue
 set has changed since the last successful send, OR ≥24h have elapsed since
@@ -90,12 +95,16 @@ def check_uncommitted_changes() -> list[str]:
     for fname in files:
         last_ct = _last_commit_time(fname)
         if last_ct is None:
-            # Never-committed-but-tracked. Use index/blob mtime as fallback;
-            # fall back to filesystem mtime only if git can't tell us.
+            # Never-committed (newly staged or first-add). No commit clock
+            # exists, so we can't tell if it's been staged for 5 minutes or
+            # 5 days. Report it as a "newly staged" item without an age —
+            # the dedup fingerprint suppresses repeat sends, so this won't
+            # spam. The first run will alert; subsequent runs stay quiet
+            # until the issue set changes.
             fpath = REPO / fname
-            if not fpath.exists():
-                continue
-            last_ct = int(fpath.stat().st_mtime)
+            if fpath.exists():
+                stale.append(f"{fname} (newly staged, never committed)")
+            continue
         age = now - last_ct
         if age > STALE_THRESHOLD_SECONDS:
             hours = age / 3600

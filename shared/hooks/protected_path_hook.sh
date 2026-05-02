@@ -37,6 +37,14 @@ _is_safe_verb() {
         cat|head|tail|less|more|grep|rg|egrep|fgrep|wc|file|stat|ls|diff|strings|xxd|od|hexdump|readlink|realpath|basename|dirname|test|true|false|type|which|id|whoami|date|uname|sw_vers|df|du|uptime|ps|pgrep|lsof|netstat|dig|nslookup|host|ping|traceroute|jq|yq|printenv|echo|printf|sleep|sort|uniq|cut|tr|expr|bc|md5|shasum|sha256sum|md5sum|column|fmt|fold|expand|unexpand|rev|nl|comm|join|paste|tsort|seq|shuf)
             return 0 ;;
         git)
+            # NOTE: `git add` mutates the index, so it is not strictly
+            # read-only. It is kept in this list as a workflow exception
+            # because removing it re-triggers Pattern-33 false positives
+            # on laptops without bashlex (where scan_command.py falls back
+            # to regex over command args, including filenames like
+            # `credential_leak_hook.sh` that grep as protected paths).
+            # Index-level writes do not touch protected filesystem paths,
+            # so the security model is preserved.
             case "$second" in
                 add|status|diff|log|show|blame|branch|remote|fetch|rev-parse|config|check-ignore|ls-files|ls-tree|shortlog|reflog|describe|name-rev|for-each-ref|merge-base)
                     return 0 ;;
