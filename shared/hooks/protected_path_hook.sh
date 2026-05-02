@@ -22,22 +22,55 @@ if echo "$COMMAND" | grep -qE '^(ssh |scp )'; then
     exit 0
 fi
 
-# Pattern-33 fix: truly read-only, SIMPLE commands cannot modify anything
-# this hook protects. But only bypass if the command has NO redirect operators,
-# pipes, semicolons, or && — any of those could route output to a protected
-# path or chain a dangerous command after a safe one.
-if ! echo "$COMMAND" | grep -qE '[>|;&]'; then
-    FIRST_VERB=$(echo "$COMMAND" | sed 's/^cd [^[:space:]]*[[:space:]]*//' | awk '{print $1}')
-    case "$FIRST_VERB" in
-        cat|head|tail|less|more|grep|rg|wc|file|stat|ls|diff|strings|xxd|od|hexdump|readlink|realpath|basename|dirname|test|true|false|type|which|id|whoami|date|uname|sw_vers|df|du|uptime|ps|pgrep|lsof|netstat|dig|nslookup|host|ping|traceroute|jq|yq|printenv)
-            exit 0 ;;
+# Pattern-34 fix: read-only command bypass that handles pipes, chains, and
+# multi-line commands. Previous Pattern-33 bypass rejected any command with
+# |, &, or ; — causing false positives on safe patterns like `grep foo |
+# head -5` or `cd dir && git diff`. Now: split on &&, ||, ;, pipe, newline
+# and check whether EVERY segment is a known-safe read-only verb. Only if a
+# redirect (>) is present do we skip the bypass entirely.
+#
+# Pipe splitting uses ' | ' (with spaces) to avoid matching \| inside grep
+# patterns or || in conditionals (|| is split separately).
+_is_safe_verb() {
+    local verb="$1" second="$2"
+    case "$verb" in
+        cat|head|tail|less|more|grep|rg|egrep|fgrep|wc|file|stat|ls|diff|strings|xxd|od|hexdump|readlink|realpath|basename|dirname|test|true|false|type|which|id|whoami|date|uname|sw_vers|df|du|uptime|ps|pgrep|lsof|netstat|dig|nslookup|host|ping|traceroute|jq|yq|printenv|echo|printf|sleep|awk|sed|sort|uniq|cut|tr|expr|bc|md5|shasum|sha256sum|md5sum|column|fmt|fold|expand|unexpand|rev|nl|comm|join|paste|tsort|seq|shuf|env|xargs|until|do|done|while|for|if|then|else|fi|\[|\[\[)
+            return 0 ;;
         git)
-            SECOND_WORD=$(echo "$COMMAND" | sed 's/^cd [^[:space:]]*[[:space:]]*//' | awk '{print $2}')
-            case "$SECOND_WORD" in
-                add|status|diff|log|show|blame|branch|remote|fetch|stash|rev-parse|config|check-ignore|ls-files|ls-tree|shortlog|reflog|describe|name-rev|for-each-ref)
-                    exit 0 ;;
+            case "$second" in
+                add|status|diff|log|show|blame|branch|remote|fetch|stash|rev-parse|config|check-ignore|ls-files|ls-tree|shortlog|reflog|describe|name-rev|for-each-ref|cherry-pick|merge-base|tag)
+                    return 0 ;;
+            esac ;;
+        cd|pushd|popd)
+            return 0 ;;
+        gh)
+            case "$second" in
+                pr|issue|run|api|repo|release|label|auth|browse|search|gist|status)
+                    return 0 ;;
             esac ;;
     esac
+    return 1
+}
+
+if ! echo "$COMMAND" | grep -qE '[>]'; then
+    ALL_SAFE=true
+    # Split: && and || first (multi-char), then ; and newline, then pipe
+    # (space-padded to avoid matching \| inside grep patterns).
+    _SPLIT=$(echo "$COMMAND" | sed 's/ && /\n/g; s/ || /\n/g; s/;/\n/g; s/ | /\n/g')
+    while IFS= read -r _seg; do
+        _seg=$(echo "$_seg" | sed 's/^[[:space:]]*//')
+        [ -z "$_seg" ] && continue
+        _verb=$(echo "$_seg" | awk '{print $1}')
+        _second=$(echo "$_seg" | awk '{print $2}')
+        [ -z "$_verb" ] && continue
+        if ! _is_safe_verb "$_verb" "$_second"; then
+            ALL_SAFE=false
+            break
+        fi
+    done <<< "$_SPLIT"
+    if [ "$ALL_SAFE" = true ]; then
+        exit 0
+    fi
 fi
 
 # scan_command.py: strip data tokens (commit bodies, quoted heredocs).
