@@ -1,4 +1,13 @@
 #!/bin/bash
+
+# Pattern 36 fix: bypass for server-internal claude calls.
+# conversation_server's haiku tab-title generator sets
+# CLAUDE_HOOKS_BYPASS=server_internal via env_for_claude_cli().
+# Skip - the call is already inside a trusted parent process.
+if [ "${CLAUDE_HOOKS_BYPASS:-}" = "server_internal" ]; then
+    exit 0
+fi
+
 # hook_smoke_test.sh — Meta-defence for PreToolUse hook false positives.
 # Run at SessionStart to catch regressions before Tim hits them live.
 # Pattern-34: expanded from 21 to 29 tests covering pipes, chains, and
