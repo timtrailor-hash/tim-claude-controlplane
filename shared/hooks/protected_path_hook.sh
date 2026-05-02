@@ -53,7 +53,9 @@ _is_safe_verb() {
                 issue)
                     case "$third" in view|list|status|"") return 0 ;; esac ;;
                 repo)
-                    case "$third" in view|list|clone|"") return 0 ;; esac ;;
+                    # `gh repo clone` writes to disk — exclude from read-only
+                    # bypass. Keep view/list (read-only).
+                    case "$third" in view|list|"") return 0 ;; esac ;;
                 release)
                     case "$third" in view|list|"") return 0 ;; esac ;;
                 label)
@@ -67,7 +69,9 @@ _is_safe_verb() {
     return 1
 }
 
-if ! echo "$COMMAND" | grep -qE '[>]' && ! echo "$COMMAND" | grep -qE '\$\(|`'; then
+if ! echo "$COMMAND" | grep -qE '[>]' \
+    && ! echo "$COMMAND" | grep -qE '\$\(|`' \
+    && ! echo "$COMMAND" | grep -qF '<('; then
     ALL_SAFE=true
     # Split: && and || first (multi-char), then ; and newline, then pipe
     # (space-padded to avoid matching \| inside grep patterns).

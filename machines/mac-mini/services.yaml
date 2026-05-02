@@ -132,7 +132,7 @@ services:
     notes: "Auto-merge added 2026-05-01. Tracked plist added to controlplane same day."
 
   stale-wip-alert:
-    purpose: "Detect stale WIP: uncommitted tracked changes >24h or branches content-identical to origin/main"
+    purpose: "Detect stale WIP: tracked uncommitted changes (working tree or index) >24h or branches with no unique commits vs origin/main"
     owner: stale_wip_alert.py
     mode: "StartInterval 21600"
     python: /opt/homebrew/bin/python3.11
@@ -142,7 +142,7 @@ services:
       - SMTP_PASS
     failure_mode: "LOW — stale WIP detection paused; no runtime impact"
     auto_fix: false
-    notes: "Pattern 34 enforcement. Emails Tim when controlplane has abandoned work."
+    notes: "Pattern 34 enforcement. Dedup state at ~/Library/Application Support/stale_wip_alert/state.json — sends only on changed issue set or after 24h."
 
   ci-failure-poller:
     purpose: "Poll GitHub Actions for main-branch failures > 1h old; push to Terminal APNs. Replaces ntfy."

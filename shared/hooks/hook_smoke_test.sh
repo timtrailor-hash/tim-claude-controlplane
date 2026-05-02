@@ -24,15 +24,25 @@ run_hook() {
 
     if [ "$expected" = "pass" ]; then
         if echo "$output" | grep -q '"permissionDecision"'; then
-            echo "FAIL [$label]: expected PASS but hook emitted ask/deny" >&2
+            echo "FAIL [$label]: expected PASS but hook emitted permissionDecision" >&2
             echo "  command: $command" >&2
+            echo "  output:  $output" >&2
             FAILURES=$((FAILURES + 1))
             return
         fi
     elif [ "$expected" = "ask" ]; then
-        if ! echo "$output" | grep -q '"permissionDecision"'; then
-            echo "FAIL [$label]: expected ASK but hook passed through" >&2
+        if ! echo "$output" | grep -q '"permissionDecision":[[:space:]]*"ask"'; then
+            echo "FAIL [$label]: expected ASK but got something else" >&2
             echo "  command: $command" >&2
+            echo "  output:  $output" >&2
+            FAILURES=$((FAILURES + 1))
+            return
+        fi
+    elif [ "$expected" = "deny" ]; then
+        if ! echo "$output" | grep -q '"permissionDecision":[[:space:]]*"deny"'; then
+            echo "FAIL [$label]: expected DENY but got something else" >&2
+            echo "  command: $command" >&2
+            echo "  output:  $output" >&2
             FAILURES=$((FAILURES + 1))
             return
         fi
@@ -78,7 +88,7 @@ if [ -f "$HOOK" ]; then
     run_hook "$HOOK" "ps aux | grep claude | grep -v grep | head -10" "pass" "ps-multi-pipe"
     run_hook "$HOOK" "cd ~/code && git status" "pass" "cd-chain-status"
     run_hook "$HOOK" "cd ~/code && git diff -- protected_path_hook.sh" "pass" "cd-chain-diff"
-    run_hook "$HOOK" 'sleep 5 && cat /tmp/test.txt && echo done' "pass" "sleep-chain-cat"
+    run_hook "$HOOK" 'sleep 0 && cat /tmp/test.txt && echo done' "pass" "sleep-chain-cat"
     run_hook "$HOOK" "gh pr view 38 --json statusCheckRollup" "pass" "gh-pr-view"
     run_hook "$HOOK" 'grep -n "__LA_WRITE__\|LaunchAgents" scan_command.py | head -20' "pass" "grep-sentinel-pipe"
 
@@ -93,6 +103,18 @@ if [ -f "$HOOK" ]; then
     run_hook "$HOOK" 'cp test.plist ~/Library/LaunchAgents/ && echo done' "ask" "cp-la-chain"
     run_hook "$HOOK" 'echo test > /Library/LaunchAgents/evil.plist' "ask" "redirect-la-bypass"
     run_hook "$HOOK" 'cp /tmp/x /Library/test.plist' "ask" "cp-sys-write"
+
+    # ADVERSARIAL: process substitution must not bypass via safe-verb wrapper
+    run_hook "$HOOK" 'cat <(cp evil.plist ~/Library/LaunchAgents/test.plist)' "ask" "proc-subst-bypass"
+    run_hook "$HOOK" 'diff <(cat /etc/hosts) <(cp evil.plist /Library/LaunchDaemons/x.plist)' "ask" "proc-subst-pair-bypass"
+
+    # ADVERSARIAL: spaceless operators must fall through residual check, then
+    # be caught by the full scan because they write to a protected path.
+    run_hook "$HOOK" 'cd ~/code&&cp evil.plist ~/Library/LaunchAgents/' "ask" "spaceless-and-la-write"
+    run_hook "$HOOK" 'echo foo|cp evil.plist ~/Library/LaunchAgents/' "ask" "spaceless-pipe-cp"
+
+    # MUST PASS: spaceless read-only forms still work via residual full-scan
+    run_hook "$HOOK" 'ls|head -3' "pass" "spaceless-pipe-head"
 fi
 
 if [ "$FAILURES" -gt 0 ]; then
