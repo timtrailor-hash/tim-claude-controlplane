@@ -11,9 +11,11 @@ schema_version: 1
 hostname_match: "Tims-MacBook-Pro*"
 role: "thin client — SSH into Mac Mini for real work"
 
-# Only ONE LaunchAgent permitted. Everything else = drift.
+# LaunchAgents permitted on the laptop. Tight allowlist — drift is detectable.
 allowed_launchagents:
-  - com.timtrailor.health-check          # lightweight local heartbeat (see audit §3.1 for leave-alone rationale)
+  - com.timtrailor.health-check          # lightweight local heartbeat (audit §3.1)
+  - com.timtrailor.memory-git-pull       # periodic git pull on the memory clone (read-only)
+  - com.timtrailor.watchdog              # cross-host Mac Mini watchdog (Pattern 36 — must run OFF the Mac Mini)
 
 # The memory tree must be a symlink to the canonical git clone on this host.
 required_symlinks:
