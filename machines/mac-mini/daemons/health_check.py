@@ -46,6 +46,7 @@ _FALLBACK_LAUNCHAGENTS = [
     "com.timtrailor.trend-tracker",
     "com.timtrailor.credential-rotation",
     "com.timtrailor.stale-pr-alert",
+    "com.timtrailor.stale-wip-alert",
 ]
 
 
