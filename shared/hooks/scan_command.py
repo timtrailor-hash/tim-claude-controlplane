@@ -377,14 +377,41 @@ def _recurse_into_string(script: str, out: list[str]) -> None:
 # ── Top-level scan ──────────────────────────────────────────────────────────
 
 
+_WRITE_VERBS = re.compile(
+    r"\b(cp|mv|rsync|install|ln|tee|rm|unlink|chmod|chown|chflags|touch|mkdir)\b"
+)
+_LA_PATH = re.compile(r"Library/(LaunchAgents|LaunchDaemons)")
+_SYS_PATH = re.compile(r"(/etc/|/Library/)")
+_REDIRECT_INTO = re.compile(
+    r"(?:>>?|&>>?)\s*\S*(Library/Launch(?:Agents|Daemons)|/etc/|/Library/)"
+)
+
+
+def _regex_sentinel_fallback(cmd: str) -> str:
+    """When bashlex is unavailable, scan with regexes for write-verb + LA/sys
+    path patterns and emit __LA_WRITE__ / __SYS_WRITE__ sentinels.
+    False positives acceptable; missing real writes is not."""
+    result = cmd
+    if _WRITE_VERBS.search(cmd) and _LA_PATH.search(cmd):
+        result += " __LA_WRITE__"
+    if _WRITE_VERBS.search(cmd) and _SYS_PATH.search(cmd):
+        result += " __SYS_WRITE__"
+    if _REDIRECT_INTO.search(cmd):
+        if _LA_PATH.search(cmd):
+            result += " __LA_WRITE__"
+        if _SYS_PATH.search(cmd):
+            result += " __SYS_WRITE__"
+    return result
+
+
 def _scan(cmd: str) -> str:
     try:
         import bashlex
     except ImportError:
-        # Pattern-32 fix: without bashlex, at least strip quoted-heredoc
-        # bodies so commit messages mentioning "launchctl bootstrap" etc.
-        # don't trigger protected_path_hook false positives.
-        return _strip_quoted_heredocs(cmd)
+        import sys as _sys
+        print("scan_command.py: bashlex not installed -- using regex fallback", file=_sys.stderr)
+        stripped = _strip_quoted_heredocs(cmd)
+        return _regex_sentinel_fallback(stripped)
     pre = _strip_quoted_heredocs(cmd)
     try:
         trees = bashlex.parse(pre)
