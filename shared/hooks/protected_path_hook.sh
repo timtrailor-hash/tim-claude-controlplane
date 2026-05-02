@@ -2,6 +2,15 @@
 # Claude Code pre-command hook: for risky operations, request explicit user
 # approval via permissionDecision: "ask" rather than hard-blocking with exit 2.
 
+# Pattern 36 fix: bypass for server-internal claude calls.
+# conversation_server's haiku tab-title generator and similar internal
+# subprocess calls set CLAUDE_HOOKS_BYPASS=server_internal via
+# env_for_claude_cli(). Skip the hook entirely — the call is already
+# inside a trusted parent process; the hooks are for interactive sessions.
+if [ "${CLAUDE_HOOKS_BYPASS:-}" = "server_internal" ]; then
+    exit 0
+fi
+
 INPUT=$(cat)
 
 COMMAND=$(echo "$INPUT" | python3 -c "
