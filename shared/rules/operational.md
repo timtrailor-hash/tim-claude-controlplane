@@ -23,6 +23,23 @@ If you find yourself drafting a message that ends "OK to commit?" or "Want me to
 
 See `shared/rules/reply-style.md` for the CEO + ADHD reply rules (max 3 questions, no time estimates, no deferral phrases) and the scoped em-dash rule (terminal exempt, external output banned). Loaded on both personal and work side.
 
+## Permission tiers (four-tier model, added 2026-05-02 after Pattern 36)
+
+The `protected_path_hook.sh` PreToolUse hook classifies every Bash call into one of four tiers. Tim's iPhone tap should only ever appear for T4. Anything below T4 is handled without him.
+
+| Tier | Action class | Gate | Examples |
+|------|--------------|------|----------|
+| **T1** | auto-allow | hook only, no human, no reviewer | Read/Glob/Grep, safe-verb-only Bash chains (`grep | head`, `cd && git diff`), Edit/Write to non-load-bearing project paths |
+| **T2** | auto-deny | hook only, no human, no reviewer | `rm -rf /`, force-push to main/master, redirects to block devices, in-place edits of `~/.claude/hooks/` |
+| **T3** | reviewer-gated | `tier3_reviewer.py` calls Sonnet via subscription Claude (no API spend), returns APPROVE/BLOCK/ASK | Anything ambiguous: `cp` to system path, write to load-bearing path (settings.json, daemons/, .github/workflows/), commands the classifier can't pre-judge |
+| **T4** | Tim's tap | iOS card via `permissionDecision: "ask"` | `launchctl bootstrap/bootout/load/unload`, force-push to non-main, plist writes, sudo reboot, repo visibility flips, `brew/pip/npm install`, paid spend, message sends to non-Tim |
+
+The classifier (`shared/hooks/tier_classifier.py`) is the single source of truth for the T2/T4 pattern lists. Pattern 1-7 in `protected_path_hook.sh` are kept as a fallback safety net but should be migrated into the classifier over time.
+
+The reviewer (`shared/hooks/tier3_reviewer.py`) uses subscription auth (Tim's Max plan, zero API cost) and a strict structured-output prompt with prompt-injection defence. Failure mode is fail-open to Tim (returns ASK), never silent-allow.
+
+Smoke tests in `hook_smoke_test.sh` cover one example per tier; new patterns added to the classifier MUST add a smoke test.
+
 ## Plan Mode Triggers
 Enter plan mode (write out the plan, confirm before implementing) for:
 - Any change to daemons, LaunchAgents, or automated processes
