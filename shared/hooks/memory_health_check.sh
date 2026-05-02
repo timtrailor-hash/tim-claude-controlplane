@@ -1,4 +1,13 @@
 #!/bin/bash
+
+# Pattern 36 fix: bypass for server-internal claude calls.
+# conversation_server's haiku tab-title generator sets
+# CLAUDE_HOOKS_BYPASS=server_internal via env_for_claude_cli().
+# Skip - the call is already inside a trusted parent process.
+if [ "${CLAUDE_HOOKS_BYPASS:-}" = "server_internal" ]; then
+    exit 0
+fi
+
 # Memory MCP functional health check.
 #
 # Why this exists: lessons.md Pattern 3 — "verification must test the user

@@ -1,4 +1,13 @@
 #!/bin/bash
+
+# Pattern 36 fix: bypass for server-internal claude calls.
+# conversation_server's haiku tab-title generator sets
+# CLAUDE_HOOKS_BYPASS=server_internal via env_for_claude_cli().
+# Skip - the call is already inside a trusted parent process.
+if [ "${CLAUDE_HOOKS_BYPASS:-}" = "server_internal" ]; then
+    exit 0
+fi
+
 # memory_sync_pull.sh — pull transcripts from Mac Mini and rebuild locally
 #
 # ARCHITECTURE (Phase 5): Transcripts are canonical. Indexes are derived.
