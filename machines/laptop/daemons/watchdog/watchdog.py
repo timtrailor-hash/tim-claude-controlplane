@@ -379,19 +379,22 @@ def action_reboot(state: dict) -> bool:
 
 # ── Notifier ──────────────────────────────────────────────────────────────
 def push_throttled(state: dict, condition_key: str, title: str, body: str) -> bool:
-    """Send a push only if we haven't pushed for this condition recently."""
+    """Send a push only if we haven't pushed for this condition recently.
+
+    /push-message takes {"content": "..."}. We concat title + body so the
+    iOS notification still reads naturally.
+    """
     last = state.get("last_pushes", {}).get(condition_key, 0)
     if time.time() - last < PUSH_THROTTLE_SECS:
         return False
-    # Use the conversation_server's /push-message endpoint if reachable; else SSH+pmset wall.
-    payload = json.dumps({"title": title, "body": body, "bundle_id": "com.timtrailor.terminal"})
+    content = title + " - " + body if body else title
+    payload = json.dumps({"content": content})
     code, _body = http_post(f"http://{MAC_MINI_HOST}:8081/push-message", payload, timeout=8)
     if code == 200:
         state.setdefault("last_pushes", {})[condition_key] = time.time()
         save_state(state)
         log(f"push sent condition={condition_key} title={title!r}")
         return True
-    # Fallback: SMTP via Mac Mini cli isn't always feasible; just log.
     log(f"push FAILED condition={condition_key} code={code}")
     return False
 
